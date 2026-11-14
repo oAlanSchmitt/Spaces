@@ -942,6 +942,17 @@ export function Sidebar() {
         onKeyDown={(e) => spaceEvent(e) && sidebarMenu.onKeyDown(e)}
         onContextMenu={(e) => spaceEvent(e) && sidebarMenu.onContextMenu(e)}
       >
+        <div className="sidebar__group sidebar__rheo-spaces">
+          <Link
+            to="/org/$orgId/spaces"
+            params={{ orgId }}
+            className="sidebar__item"
+            title={rail ? t("rheoSpaces.nav") : undefined}
+          >
+            <Icon name="layers" />
+            <span className="sidebar__item-label">{t("rheoSpaces.nav")}</span>
+          </Link>
+        </div>
         {sectionOrder.order.filter((id) => blocks[id]).map((id) => sectionOrder.block(id, blocks[id], !rail))}
       </div>
 

@@ -67,6 +67,7 @@ import {
   createPermissionToolSource,
   createReactToolSource,
   createReleaseAsksToolSource,
+  createRheoToolSource,
   createSandboxToolSource,
   createScheduleToolSource,
   createSessionScreening,
@@ -121,6 +122,7 @@ import {
   type ScheduleReader,
   type SkillDeps,
   type StorageDeps,
+  type SubscriptionModel,
   setWorkOrgCap,
   shareSavedFile,
   smallModelFor,
@@ -146,6 +148,7 @@ export interface EngineOptions {
   config: Config;
   adapters: Adapters;
   modelProviders: Record<string, ModelProvider>;
+  subscription?: SubscriptionModel;
   /** Tests: extra tool sources, in-process MCP, fake HTTP, fake embeddings. */
   toolSources?: ToolSource[];
   mcpConnect?: McpConnect;
@@ -217,6 +220,7 @@ export function buildEngine(o: EngineOptions) {
     db,
     keyWrappers,
     providers: o.modelProviders,
+    subscription: o.subscription,
     platformCredentials: adapters.platformCredentials,
     onBudgetThreshold: async (e) => {
       await notifyOwnerOnBudget(adapters.pubsub, db)(e);
@@ -397,6 +401,7 @@ export function buildEngine(o: EngineOptions) {
   setWorkOrgCap(config.AGENT_WORK_MAX_PER_ORG);
   const tools = createToolGateway({
     sources: [
+      createRheoToolSource(),
       // A question for what the agent could find, or a secret asked in the chat, is held first (ADR 0109).
       createAskUserToolSource({ judge: context.judge, tools: () => tools }),
       // Missing something a request needs: ask for it (an approval card) instead of failing.

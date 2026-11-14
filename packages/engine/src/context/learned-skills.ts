@@ -358,6 +358,7 @@ const SKILL_SCHEMA = {
  */
 export async function promoteHowTos(deps: ContextDeps, orgId: string, skillAfter: number) {
   const { db } = deps;
+  if (await readRheoPolicy(db, orgId)) return 0;
   const notes = await db
     .select()
     .from(contextItems)
@@ -537,6 +538,7 @@ async function promoteCluster(deps: ContextDeps, orgId: string, agentId: string,
  */
 export async function shareAcrossAgents(deps: ContextDeps, orgId: string) {
   const { db } = deps;
+  if (await readRheoPolicy(db, orgId)) return 0;
   const rows = await db
     .select()
     .from(contextItems)
@@ -625,3 +627,5 @@ export async function decayAgentSkills(deps: ContextDeps, orgId: string, now = n
   await db.update(skills).set({ deletedAt: now }).where(inArray(skills.id, gone));
   return gone.length;
 }
+
+import { readRheoPolicy } from "../rheo-policy";

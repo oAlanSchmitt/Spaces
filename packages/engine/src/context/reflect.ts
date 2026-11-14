@@ -2,6 +2,7 @@ import { and, type Database, desc, eq, inArray, isNull, schema, sql } from "@age
 import { currentHandles } from "../agents";
 import { cutText, cutTextEnd } from "../format";
 import { announceMessageMemories } from "../message-memories";
+import { readRheoPolicy } from "../rheo-policy";
 import { isRightHand } from "../right-hand";
 import { neutralizeUntrusted } from "../untrusted";
 import { isPersonalWorkspace } from "../workspace-mode";
@@ -129,7 +130,7 @@ export function parseReflectOutput(text: string): ReflectOutput {
 }
 
 export interface ReflectResult {
-  skipped?: "missing" | "cap_reached" | "nothing_new" | "right_hand";
+  skipped?: "missing" | "cap_reached" | "nothing_new" | "right_hand" | "rheo_protected";
   results: ConsolidateResult[];
   rejected: { content: string; reason: "secret" | "permissions" | "no_sources" }[];
   proposals: string[];
@@ -153,6 +154,7 @@ export async function reflectThread(
 ): Promise<ReflectResult> {
   const { db } = deps;
   const out: ReflectResult = { results: [], rejected: [], proposals: [] };
+  if (await readRheoPolicy(db, input.orgId)) return { ...out, skipped: "rheo_protected" };
   const cfg = { ...REFLECT_DEFAULTS, ...deps.reflect };
   const judge = judgeOf(deps);
   const thread = await loadThread(db, input.orgId, input.threadRootId);

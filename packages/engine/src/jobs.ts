@@ -103,6 +103,7 @@ import { notifyPersonLimit, PERSON_LIMIT_JOB } from "./person-usage";
 import { checkPushReceipts, deliverPush, pushTicketsOf } from "./push";
 import { reachOf, settleReach } from "./reach";
 import { routineCreatorOf } from "./requester";
+import { wrapRheoJobHandlers } from "./rheo-jobs";
 import { considerCard, RIGHT_HAND_DECIDE_JOB } from "./right-hand-approvals";
 import { lodiLaneHandlers } from "./right-hand-lanes";
 import {
@@ -140,6 +141,8 @@ import {
   purgeAccount,
   purgeWorkspace,
 } from "./workspace-deletion";
+
+export { wrapRheoJobHandlers } from "./rheo-jobs";
 
 /** A thread that grew by another `everyMessages` gets reflected on (capture), within the per-thread cap. */
 async function maybeEnqueueReflection(deps: JobDeps, orgId: string, threadId: string) {
@@ -1197,7 +1200,7 @@ export function createJobHandlers(deps: JobDeps): JobHandlers {
       if (message) await scheduleParkedChecks(deps.db, message).catch(() => {});
     }
   };
-  return handlers;
+  return wrapRheoJobHandlers(deps.db, handlers, deps.pubsub);
 }
 
 /** The message opens by addressing `handle` ("@ada …", after any other leading mentions). */

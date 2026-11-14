@@ -102,6 +102,7 @@ import { createMachineSockets } from "./realtime/machines";
 import { createStreamSockets } from "./realtime/streams";
 import { createRealtime, type SocketData } from "./realtime/ws";
 import { workerHealth } from "./routes/health";
+import { createSpacesCodex } from "./spaces-codex";
 import { startTelemetry } from "./telemetry";
 import { releaseOf, version } from "./version";
 import { startWorkers } from "./workers";
@@ -366,11 +367,18 @@ async function boot(
   if (missing.length > 0) {
     log.warn("emails' pictures not found: they won't show", { dir: join(webDir, "email"), missing });
   }
+  if (config.INSTALL_MODE === "native" && !config.FILES_DIR)
+    throw new Error("Spaces requires an explicit native data directory");
+  const spacesCodex =
+    config.INSTALL_MODE === "native" && config.FILES_DIR
+      ? createSpacesCodex({ db: database.db, home: resolve(config.FILES_DIR, "..", "spaces-codex") })
+      : undefined;
   const engine = buildEngine({
     db: database.db,
     config,
     adapters,
     modelProviders,
+    subscription: spacesCodex?.subscription,
     onTiming: (name, ms, attrs) => log.info("latency", { metric: name, ms, ...attrs }),
     onRunProfile: (p) => log.debug("run profile", p),
     emailArt,
@@ -500,6 +508,7 @@ async function boot(
       config,
       adapters,
       wakeWorkers: workers.wakeAll,
+      spacesCodex,
       extras: {
         embed: engine.gateway.embed,
         storage: engine.storage,
@@ -640,6 +649,7 @@ async function boot(
     if (handed > 0) log.info("jobs handed back for the next instance", { jobs: handed });
     // Browser tabs, left open so they saw those runs finish, reconnect to the next instance.
     await server?.stop(true);
+    spacesCodex?.stop();
     for (const module of modules) await module.onStop?.();
     await adapters.pubsub.close?.();
     await database.close();

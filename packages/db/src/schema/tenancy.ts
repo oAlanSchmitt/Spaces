@@ -38,6 +38,8 @@ export const organizations = pgTable("organizations", {
    * rules). Goes into the system prompt of every agent of the organization.
    */
   context: text().notNull().default(""),
+  /** Protected Rheo workspace; an absent policy mapping must deny agent execution. */
+  rheoProtected: boolean().notNull().default(false),
   /** The workspace logo (`/api/app/org-logos/{orgId}/{hash}.{ext}`), uploaded by an admin; null = the agent mark. */
   logo: text(),
   /**

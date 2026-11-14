@@ -1,10 +1,11 @@
-import type {
-  MessageFilter,
-  SearchDocument,
-  SearchHit,
-  SearchIndexResolver,
-  SearchKind,
-  SearchQuery,
+import {
+  createPostgresSearchResolver,
+  type MessageFilter,
+  type SearchDocument,
+  type SearchHit,
+  type SearchIndexResolver,
+  type SearchKind,
+  type SearchQuery,
 } from "@agenteschat/adapters";
 import {
   and,
@@ -34,6 +35,7 @@ import { replyExcerpt } from "./messages";
 import { isQuietNotice } from "./notices";
 import { can, requirePermission } from "./organizations";
 import { enqueue } from "./outbox";
+import { readRheoPolicy } from "./rheo-policy";
 import { isRoutineRoomKey } from "./routine-brief";
 import { openOrg } from "./standing";
 import { adminChannelSql, fileSeenSql, fileSharedSql, taskSeenSql } from "./task-access";
@@ -101,6 +103,7 @@ export async function enqueueIndex(tx: Executor, input: { orgId: string; kind: S
 
 /** Job `search.index`: builds the document (or removes it), embeds it if possible, upserts. */
 export async function indexSource(deps: SearchDeps, input: { orgId: string; kind: SearchKind; sourceId: string }) {
+  if (await readRheoPolicy(deps.db, input.orgId)) return;
   const builder = builders.get(input.kind);
   if (!builder) return;
   const index = await deps.search.forOrg(input.orgId);
@@ -154,6 +157,7 @@ export async function reindexOrg(
   orgId: string,
   options: { pageSize?: number; kinds?: readonly SearchKind[] } = {},
 ) {
+  if (await readRheoPolicy(deps.db, orgId)) return 0;
   const page = options.pageSize ?? 200;
   const wanted = (kind: SearchKind) => !options.kinds?.length || options.kinds.includes(kind);
   let indexed = 0;
@@ -229,7 +233,7 @@ export async function queueEmbeddingBackfill(db: Database, input: { model: strin
     select gen_random_uuid(), ${o.id}, 'search.reindex', ${JSON.stringify({ kinds })}::jsonb,
       'search.reindex:' || ${o.id} || ':' || ${input.model}::text || ':' || ${kinds.join(",")}::text
     from ${o}
-    where ${openOrg} and exists (select 1 from ${d} where ${d.orgId} = ${o.id}
+    where ${openOrg} and not ${o.rheoProtected} and exists (select 1 from ${d} where ${d.orgId} = ${o.id}
       and ${d.kind} = any(${`{${kinds.join(",")}}`}::text[]) and ${d.embeddingModel} is distinct from ${input.model}::text)
     on conflict (dedupe_key) do update
       set status = 'pending', attempts = 0, next_attempt_at = now(), last_error = null, locked_by = null
@@ -410,9 +414,10 @@ export async function searchVisible(
     "after" | "before" | "messages" | "sort" | "visibleIssueScopes" | "visibleFileScopes" | "minTextRank"
   >,
 ): Promise<SearchHit[]> {
+  const protectedWorkspace = await readRheoPolicy(deps.db, input.orgId);
   // A list by date ranks by no vector: no embedding to pay for. A provider that fails or is slow leaves the words.
   const embedded =
-    input.text.trim() && (input.sort ?? "relevance") === "relevance"
+    !protectedWorkspace && input.text.trim() && (input.sort ?? "relevance") === "relevance"
       ? await deps.gateway
           .embed({
             orgId: input.orgId,
@@ -422,7 +427,7 @@ export async function searchVisible(
           })
           .catch(() => null)
       : null;
-  const index = await deps.search.forOrg(input.orgId);
+  const index = await (protectedWorkspace ? createPostgresSearchResolver(deps.db) : deps.search).forOrg(input.orgId);
   return index.query({
     text: input.text,
     embedding: embedded?.vectors[0] ?? null,

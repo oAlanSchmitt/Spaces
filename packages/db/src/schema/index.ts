@@ -18,6 +18,8 @@ export * from "./missions";
 export * from "./notifications";
 export * from "./operator";
 export * from "./push";
+export * from "./rheo-knowledge";
+export * from "./rheo-spaces";
 export * from "./runtime";
 export * from "./sandbox";
 export * from "./skills";

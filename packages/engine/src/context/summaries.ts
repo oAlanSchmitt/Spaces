@@ -4,6 +4,7 @@ import { cutText, cutTextEnd } from "../format";
 import type { ModelGateway } from "../gateway";
 import { createLlmJudge, type Judge } from "../judge";
 import type { Message } from "../messages";
+import { readRheoPolicy } from "../rheo-policy";
 import { cheapModelForOrg } from "../router";
 import { createLlmScheduleReader, type ScheduleReader } from "../schedule-reader";
 import { neutralizeUntrusted } from "../untrusted";
@@ -189,6 +190,7 @@ export async function ensureThreadSummary(
   threadRootId: string,
   options: { minMessages?: number; force?: boolean; text?: string } = {},
 ): Promise<ContextItem | null> {
+  if (await readRheoPolicy(deps.db, orgId)) return null;
   const thread = await loadThread(deps.db, orgId, threadRootId);
   if (!thread) return null;
   const last = thread.messages.at(-1);
@@ -245,6 +247,7 @@ export async function ensurePeriodSummary(
   period: { from: Date; to: Date },
   options: { minMessages?: number } = {},
 ): Promise<ContextItem | null> {
+  if (await readRheoPolicy(deps.db, orgId)) return null;
   const scopeId = channelId;
   const [existing] = await deps.db
     .select()

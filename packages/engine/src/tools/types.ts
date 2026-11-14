@@ -5,6 +5,9 @@ import type { JsonSchema } from "./json-schema";
 
 type ApprovalRow = typeof schema.approvals.$inferSelect;
 
+/** Only server-owned sources can opt into protected workspace tools. */
+export const RHEO_INTERNAL_TOOL = Symbol("rheo-internal-tool");
+
 /** `schedule_action`'s ask (`ToolContext.prepareAhead`): one exact call of a connected app's tool, for a routine's run. */
 export interface AheadRequest {
   /** The tool's name as listed (a big connector's real tool too). */
@@ -87,6 +90,7 @@ export type ConnectorVia = schema.ConnectorVia;
  * turns `sensitive` calls into approval requests.
  */
 export interface ToolDefinition {
+  rheoInternal?: typeof RHEO_INTERNAL_TOOL;
   /** Name shown to the model: `^[a-zA-Z0-9_-]{1,64}$`, unique within a run. */
   name: string;
   description: string;
@@ -231,5 +235,6 @@ export type CallCheck =
 /** Supplies tools for a run. The gateway filters them by the agent's scopes. */
 export interface ToolSource {
   readonly name: string;
+  readonly rheoInternal?: typeof RHEO_INTERNAL_TOOL;
   tools(ctx: ToolContext): Promise<ToolDefinition[]>;
 }

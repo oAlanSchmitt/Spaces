@@ -24,7 +24,7 @@ import { currentHandles } from "./agents";
 import { withDeletedArtifacts } from "./artifacts";
 import { audienceSql, notifyBlocked } from "./audience";
 import { postRefusal, requireChannelAccess } from "./channels";
-import { ConflictError, NotFoundError, ValidationError } from "./errors";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "./errors";
 import {
   type DecidedBy,
   decidedByOf,
@@ -44,6 +44,8 @@ import { quietNoticeSql } from "./notices";
 import { can } from "./organizations";
 import { maySql } from "./permissions";
 import { afterReplyAnswered } from "./questions";
+import { requireRheoOwner } from "./rheo-knowledge";
+import { lastRheoArchive, readRheoPolicy } from "./rheo-policy";
 import { rightHandReaches } from "./right-hand";
 import { inChannelRun, waitsOnUsage, workKeepsThread, workTakesPersonMessage } from "./run-scope";
 import { computerWaitSql, KEPT_ON_HOLD, NO_AI, outageParkedSql, passedSql, runErrorDetail, usageWaitSql } from "./runs";
@@ -1246,6 +1248,21 @@ export async function postPersonMessage(
   // One access check (membership + channel) instead of two round trips. It reads a workspace being deleted; posting
   // there is refused here too, for what posts without the API (a voice note's job).
   const { channel, membership, workspace } = await requireChannelAccess(deps.db, userId, orgId, channelId);
+  const protectedWorkspace = await readRheoPolicy(deps.db, orgId);
+  const protectedPostSnapshot = async (tx: Executor) => {
+    await tx
+      .select({ orgId: schema.rheoWorkspaces.orgId })
+      .from(schema.rheoWorkspaces)
+      .where(eq(schema.rheoWorkspaces.orgId, orgId))
+      .for("share");
+    const current = await requireRheoOwner(tx, userId, orgId);
+    if (current.state !== "active") throw new ForbiddenError("Este projeto está arquivado.", "rheo.archived");
+    return lastRheoArchive(tx, orgId);
+  };
+  const archiveFence = protectedWorkspace ? await deps.db.transaction(protectedPostSnapshot) : null;
+  if (protectedWorkspace) {
+    deps = { db: deps.db, pubsub: deps.pubsub };
+  }
   const closed = closedRefusal(membership.standing);
   if (closed) throw closed;
   if (!can(membership, "post")) throw postRefusal(workspace);
@@ -1290,27 +1307,36 @@ export async function postPersonMessage(
       : input.meta;
   // One statement: the message, its jobs, and the runs of agents that will surely answer.
   // A resend with the same `clientId` (the first response was lost) gets the message already written.
-  const { message, runs, blocked, steered, answered, reopened, duplicate } = await insertMessageWithRuns(
-    deps.db,
-    {
-      orgId,
-      channelId,
-      threadId: input.threadId,
-      author: { type: "person", userId },
-      body: input.body,
-      clientId,
-      meta:
-        clientId || meta || input.steer === "now"
-          ? {
-              ...(meta ?? {}),
-              ...(clientId ? { clientId } : {}),
-              // A computer brain can't drop a turn halfway: its task stops and starts again from this message.
-              ...(input.steer === "now" ? { steerNow: true } : {}),
-            }
-          : undefined,
-    },
-    { startRuns: true },
-  );
+  const insert = (tx: Executor) =>
+    insertMessageWithRuns(
+      tx,
+      {
+        orgId,
+        channelId,
+        threadId: input.threadId,
+        author: { type: "person", userId },
+        body: input.body,
+        clientId,
+        meta:
+          clientId || meta || input.steer === "now"
+            ? {
+                ...(meta ?? {}),
+                ...(clientId ? { clientId } : {}),
+                // A computer brain can't drop a turn halfway: its task stops and starts again from this message.
+                ...(input.steer === "now" ? { steerNow: true } : {}),
+              }
+            : undefined,
+      },
+      { startRuns: true },
+    );
+  const { message, runs, blocked, steered, answered, reopened, duplicate } = protectedWorkspace
+    ? await deps.db.transaction(async (tx) => {
+        const currentFence = await protectedPostSnapshot(tx);
+        if (currentFence?.id !== archiveFence?.id)
+          throw new ForbiddenError("O projeto foi arquivado entretanto. Envie um novo pedido.", "rheo.archived");
+        return insert(tx);
+      })
+    : await insert(deps.db);
   if (duplicate) return resendView(deps, orgId, message);
   const [view] = (await withWikiLinks(deps.db, orgId, [messageView(message)])) as [MessageView];
   // Right after the commit, before any routing: the sender's optimistic copy reconciles by `clientId`.

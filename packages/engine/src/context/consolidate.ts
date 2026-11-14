@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray, isNull, lt, lte, ne, or, schema, sql } from "@agenteschat/db";
 import { isPlaybook } from "../audience";
 import { enqueue } from "../outbox";
+import { readRheoPolicy } from "../rheo-policy";
 import {
   accessSql,
   type ContextItem,
@@ -49,6 +50,19 @@ export const UNCONFIRMED_FACT_DAYS = 30;
  */
 export async function consolidateOrg(deps: ContextDeps, orgId: string, now = new Date()) {
   const { db } = deps;
+  if (await readRheoPolicy(db, orgId)) {
+    return {
+      merged: 0,
+      archived: 0,
+      expired: 0,
+      unconfirmed: 0,
+      proposals: 0,
+      linked: 0,
+      skills: 0,
+      shared: 0,
+      skillsArchived: 0,
+    };
+  }
   let merged = 0;
   const active = await db
     .select()
@@ -263,6 +277,7 @@ const asNew = (item: ContextItem): NewContextItem => ({
 export async function consolidateByMeaning(deps: ContextDeps, orgId: string, now = new Date()) {
   const out = { moved: 0, linked: 0 };
   const { db } = deps;
+  if (await readRheoPolicy(db, orgId)) return out;
   const judge = judgeOf(deps);
   const since = new Date(now.getTime() - DAILY_JUDGING.sinceDays * 86_400_000);
   const recent = await db

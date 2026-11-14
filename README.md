@@ -1,3 +1,21 @@
+# Spaces
+
+Fork do agentes.chat para organizar negócios, clientes e projetos numa aplicação local. Cada projeto protegido usa uma organização nativa própria; o painel global conserva apenas metadados. Inclui criação de projetos pelo coordenador, conhecimento revisto e inspector de fontes, com a interface e componentes do Design System original.
+
+Esta versão é um **piloto protegido**: comandos, browser, conectores externos, rotinas automáticas e partilha entre projetos permanecem desativados. Não constitui substituição validada da instalação oficial nem migra dados de clientes automaticamente.
+
+- [Decisões e âmbito](docs/rheo-spaces/DESIGN.md)
+- [Como utilizar o Spaces](docs/rheo-spaces/USAGE.md)
+- [Executar e recuperar no Windows](docs/rheo-spaces/RUNTIME.md)
+- [Plano de execução](docs/superpowers/plans/2026-11-14-rheo-spaces.md)
+- [Progresso e evidências](docs/rheo-spaces/PROGRESS.md)
+
+Based on agentes.chat by Codari Global, LLC (https://agentes.chat). A licença e os avisos originais são preservados em [LICENSE](LICENSE), [NOTICE](NOTICE) e [TRADEMARKS.md](TRADEMARKS.md).
+
+O restante documento descreve o produto original e as suas capacidades gerais; a lista de funcionalidades acima delimita o piloto Spaces.
+
+---
+
 <p align="center">
   <a href="https://agentes.chat"><img src="apps/web/public/favicon.svg" alt="agentes.chat" width="96"></a>
 </p>

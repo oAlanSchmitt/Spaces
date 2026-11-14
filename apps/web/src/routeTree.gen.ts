@@ -44,6 +44,7 @@ import { Route as OrgOrgIdProposalsRouteImport } from './routes/org.$orgId.propo
 import { Route as OrgOrgIdRoutinesRouteImport } from './routes/org.$orgId.routines'
 import { Route as OrgOrgIdSearchRouteImport } from './routes/org.$orgId.search'
 import { Route as OrgOrgIdSettingsRouteImport } from './routes/org.$orgId.settings'
+import { Route as OrgOrgIdSpacesRouteImport } from './routes/org.$orgId.spaces'
 import { Route as OrgOrgIdTaskManagerRouteImport } from './routes/org.$orgId.task-manager'
 import { Route as OrgOrgIdTeamRouteImport } from './routes/org.$orgId.team'
 import { Route as OrgOrgIdWaitingRouteImport } from './routes/org.$orgId.waiting'
@@ -244,6 +245,11 @@ const OrgOrgIdSettingsRoute = OrgOrgIdSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => OrgOrgIdRoute,
 } as any)
+const OrgOrgIdSpacesRoute = OrgOrgIdSpacesRouteImport.update({
+  id: '/spaces',
+  path: '/spaces',
+  getParentRoute: () => OrgOrgIdRoute,
+} as any)
 const OrgOrgIdTaskManagerRoute = OrgOrgIdTaskManagerRouteImport.update({
   id: '/task-manager',
   path: '/task-manager',
@@ -409,6 +415,7 @@ export interface FileRoutesByFullPath {
   '/org/$orgId/routines': typeof OrgOrgIdRoutinesRoute
   '/org/$orgId/search': typeof OrgOrgIdSearchRoute
   '/org/$orgId/settings': typeof OrgOrgIdSettingsRoute
+  '/org/$orgId/spaces': typeof OrgOrgIdSpacesRoute
   '/org/$orgId/task-manager': typeof OrgOrgIdTaskManagerRoute
   '/org/$orgId/team': typeof OrgOrgIdTeamRoute
   '/org/$orgId/waiting': typeof OrgOrgIdWaitingRoute
@@ -469,6 +476,7 @@ export interface FileRoutesByTo {
   '/org/$orgId/routines': typeof OrgOrgIdRoutinesRoute
   '/org/$orgId/search': typeof OrgOrgIdSearchRoute
   '/org/$orgId/settings': typeof OrgOrgIdSettingsRoute
+  '/org/$orgId/spaces': typeof OrgOrgIdSpacesRoute
   '/org/$orgId/task-manager': typeof OrgOrgIdTaskManagerRoute
   '/org/$orgId/team': typeof OrgOrgIdTeamRoute
   '/org/$orgId/waiting': typeof OrgOrgIdWaitingRoute
@@ -531,6 +539,7 @@ export interface FileRoutesById {
   '/org/$orgId/routines': typeof OrgOrgIdRoutinesRoute
   '/org/$orgId/search': typeof OrgOrgIdSearchRoute
   '/org/$orgId/settings': typeof OrgOrgIdSettingsRoute
+  '/org/$orgId/spaces': typeof OrgOrgIdSpacesRoute
   '/org/$orgId/task-manager': typeof OrgOrgIdTaskManagerRoute
   '/org/$orgId/team': typeof OrgOrgIdTeamRoute
   '/org/$orgId/waiting': typeof OrgOrgIdWaitingRoute
@@ -594,6 +603,7 @@ export interface FileRouteTypes {
     | '/org/$orgId/routines'
     | '/org/$orgId/search'
     | '/org/$orgId/settings'
+    | '/org/$orgId/spaces'
     | '/org/$orgId/task-manager'
     | '/org/$orgId/team'
     | '/org/$orgId/waiting'
@@ -654,6 +664,7 @@ export interface FileRouteTypes {
     | '/org/$orgId/routines'
     | '/org/$orgId/search'
     | '/org/$orgId/settings'
+    | '/org/$orgId/spaces'
     | '/org/$orgId/task-manager'
     | '/org/$orgId/team'
     | '/org/$orgId/waiting'
@@ -715,6 +726,7 @@ export interface FileRouteTypes {
     | '/org/$orgId/routines'
     | '/org/$orgId/search'
     | '/org/$orgId/settings'
+    | '/org/$orgId/spaces'
     | '/org/$orgId/task-manager'
     | '/org/$orgId/team'
     | '/org/$orgId/waiting'
@@ -1015,6 +1027,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrgOrgIdSettingsRouteImport
       parentRoute: typeof OrgOrgIdRoute
     }
+    '/org/$orgId/spaces': {
+      id: '/org/$orgId/spaces'
+      path: '/spaces'
+      fullPath: '/org/$orgId/spaces'
+      preLoaderRoute: typeof OrgOrgIdSpacesRouteImport
+      parentRoute: typeof OrgOrgIdRoute
+    }
     '/org/$orgId/task-manager': {
       id: '/org/$orgId/task-manager'
       path: '/task-manager'
@@ -1198,6 +1217,7 @@ interface OrgOrgIdRouteChildren {
   OrgOrgIdRoutinesRoute: typeof OrgOrgIdRoutinesRoute
   OrgOrgIdSearchRoute: typeof OrgOrgIdSearchRoute
   OrgOrgIdSettingsRoute: typeof OrgOrgIdSettingsRoute
+  OrgOrgIdSpacesRoute: typeof OrgOrgIdSpacesRoute
   OrgOrgIdTaskManagerRoute: typeof OrgOrgIdTaskManagerRoute
   OrgOrgIdTeamRoute: typeof OrgOrgIdTeamRoute
   OrgOrgIdWaitingRoute: typeof OrgOrgIdWaitingRoute
@@ -1237,6 +1257,7 @@ const OrgOrgIdRouteChildren: OrgOrgIdRouteChildren = {
   OrgOrgIdRoutinesRoute: OrgOrgIdRoutinesRoute,
   OrgOrgIdSearchRoute: OrgOrgIdSearchRoute,
   OrgOrgIdSettingsRoute: OrgOrgIdSettingsRoute,
+  OrgOrgIdSpacesRoute: OrgOrgIdSpacesRoute,
   OrgOrgIdTaskManagerRoute: OrgOrgIdTaskManagerRoute,
   OrgOrgIdTeamRoute: OrgOrgIdTeamRoute,
   OrgOrgIdWaitingRoute: OrgOrgIdWaitingRoute,

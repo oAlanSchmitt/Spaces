@@ -6,6 +6,7 @@
   "files": {
     "includes": [
       "**",
+      "!.rheo",
       "!**/node_modules",
       "!**/dist",
       "!**/migrations/meta",

@@ -22,6 +22,7 @@ import { agentBudgetState } from "../gateway";
 import { enqueue } from "../outbox";
 import { runReadOutsideById } from "../outside";
 import { personBehindCall } from "../requester";
+import { readRheoPolicy } from "../rheo-policy";
 import { isRightHand } from "../right-hand";
 import { addRunStep } from "../runs";
 import type { ToolContext } from "../tools/types";
@@ -214,6 +215,7 @@ export async function afterTurnDone(
 ) {
   try {
     const { db } = deps;
+    if (await readRheoPolicy(db, run.orgId)) return false;
     const cfg = learnConfig(deps);
     const [calls, { ids: usedHowTos, counted }] = await Promise.all([runCalls(db, run), injectedHowTos(db, run)]);
     // Once per run, however many turns it ends: a run that took more messages is still one reuse.
@@ -401,7 +403,16 @@ function parseLearnOutput(text: string): { items: LearnedItem[]; skillFixes: { s
 
 export interface LearnResult {
   /** `running`: the run took more messages after the turn that queued this; the job retries (`jobs.ts`). */
-  skipped?: "missing" | "cap_reached" | "busy" | "running" | "budget" | "no_model" | "model_failed" | "right_hand";
+  skipped?:
+    | "missing"
+    | "cap_reached"
+    | "busy"
+    | "running"
+    | "budget"
+    | "no_model"
+    | "model_failed"
+    | "right_hand"
+    | "rheo_protected";
   saved: { id: string; action: string; trust: string; scopeType: string }[];
   rejected: { content: string; reason: "no_sources" | "secret" | "refused" }[];
   skills: { slug: string; action: string }[];
@@ -424,6 +435,7 @@ const ACTIVE = ["queued", "running", "waiting_approval", "waiting_input"] as con
 export async function learnRun(deps: ContextDeps, input: { orgId: string; runId: string }): Promise<LearnResult> {
   const { db } = deps;
   const out: LearnResult = { saved: [], rejected: [], skills: [] };
+  if (await readRheoPolicy(db, input.orgId)) return { ...out, skipped: "rheo_protected" };
   const cfg = learnConfig(deps);
   const [run] = await db
     .select()

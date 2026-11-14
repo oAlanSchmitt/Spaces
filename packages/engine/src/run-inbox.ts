@@ -9,6 +9,7 @@ import {
   gte,
   inArray,
   isNull,
+  lte,
   ne,
   or,
   schema,
@@ -22,6 +23,7 @@ import { publishChannelEvent } from "./events";
 import { cutText } from "./format";
 import type { Message } from "./messages";
 import { stripSentinel } from "./reply-policy";
+import { lastRheoArchive, readRheoPolicy } from "./rheo-policy";
 import { holdsMessages } from "./run-hold";
 import { inChannelRun } from "./run-scope";
 import { type AgentRun, addRunStep, replyThreadOf } from "./runs";
@@ -373,6 +375,42 @@ async function handOn(
   if (!last) return null;
   const trigger = await triggerFor(db, run, last);
   const started = await db.transaction(async (tx) => {
+    if (await readRheoPolicy(tx, run.orgId)) {
+      const [workspace] = await tx
+        .select({ state: schema.rheoWorkspaces.state })
+        .from(schema.rheoWorkspaces)
+        .where(eq(schema.rheoWorkspaces.orgId, run.orgId))
+        .for("share");
+      if (workspace?.state !== "active") return null;
+      const [source] = await tx
+        .select({ id: agentRuns.id })
+        .from(agentRuns)
+        .where(
+          and(
+            eq(agentRuns.id, run.id),
+            eq(agentRuns.orgId, run.orgId),
+            eq(agentRuns.agentId, run.agentId),
+            eq(agentRuns.channelId, run.channelId),
+          ),
+        );
+      if (!source) return null;
+      const fence = await lastRheoArchive(tx, run.orgId);
+      const [archivedSource] = fence
+        ? await tx
+            .select({ id: agentRuns.id })
+            .from(agentRuns)
+            .innerJoin(schema.auditLog, eq(schema.auditLog.id, fence.id))
+            .where(
+              and(
+                eq(agentRuns.id, run.id),
+                eq(agentRuns.orgId, run.orgId),
+                lte(agentRuns.createdAt, schema.auditLog.createdAt),
+              ),
+            )
+            .limit(1)
+        : [];
+      if (archivedSource) return null;
+    }
     // A question or note from another agent is answered by the run that has it now (ADR 0095).
     const adopt = (runId: string, messageIds: string[]) =>
       tx

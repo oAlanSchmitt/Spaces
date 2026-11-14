@@ -71,7 +71,7 @@ async function mentionRun(options: { askAgent?: boolean } = {}) {
   return { beforeModel, total: p.total.queries, runId: p.runId };
 }
 
-test("claim → model request stays within 18 statements; a whole mention run within 39", async () => {
+test("claim → model request stays within 24 statements; a whole mention run within 45", async () => {
   const run = await mentionRun();
   // 11 since every agent has a budget (ADR 0026): the call always reserves (one statement on the fast path).
   // 12 since the run stores the brain it runs with (ADR 0053 §10).
@@ -82,7 +82,8 @@ test("claim → model request stays within 18 statements; a whole mention run wi
   // that person, so its how-tos and their preferences (ADR 0120) cost no read of their own.
   // 17 since it lists the agent's background work in this conversation (ADR 0121; one statement, read beside them).
   // 18 since it says the person's app language (ADR 0122; one statement, read with the rest, no round trip of its own).
-  expect(run.beforeModel).toBeLessThanOrEqual(18);
+  // Six fresh protected-workspace checks keep missing policy, archived projects and revoked context fail-closed.
+  expect(run.beforeModel).toBeLessThanOrEqual(24);
   // 22 since the reply carries how many tool calls the run made, so the apps leave "Ver o que ele fez" out at 0.
   // 23 with the open tasks, 24 with the work handed off, 25 with what other runs here hold.
   // 30 since every turn's end is decided and recorded (ADR 0097): the judgment through the gateway, its step, and
@@ -95,10 +96,11 @@ test("claim → model request stays within 18 statements; a whole mention run wi
   // calls and its how-tos (2), in the background after the reply; and the read before the model call above.
   // 38 with the background work read before the model call above.
   // 39 with the app language read before the model call above.
-  expect(run.total).toBeLessThanOrEqual(39);
+  // The six policy checks are deliberately fresh, rather than a cache that could outlive a revocation.
+  expect(run.total).toBeLessThanOrEqual(45);
 });
 
-test("with tools, as every production run has them (find_agent among them): within 24 before the model call, 46 in all", async () => {
+test("with tools, as every production run has them (find_agent among them): within 31 before the model call, 53 in all", async () => {
   const run = await mentionRun({ askAgent: true });
   // 4 more, all for the tool list and the prompt: who is behind the run (2, the Tool Gateway's policy), the connectors
   // it lacks (1) and whether the person may talk to agents ("# Your team", 1, beside the context's other reads).
@@ -109,7 +111,8 @@ test("with tools, as every production run has them (find_agent among them): with
   // 22 with the person's app language (ADR 0122).
   // 23 with the devices people connected (one statement the prompt's list and the tool lists share, `deviceRoster`).
   // 24 with what other agents already asked the person behind the message (ADR 0172; one statement, read beside them).
-  expect(run.beforeModel).toBeLessThanOrEqual(24);
+  // Seven fresh policy checks include tool discovery, before any native source can inspect a protected project.
+  expect(run.beforeModel).toBeLessThanOrEqual(31);
   // 36: the browser profile release above, and the turn-end judge naming the teammates the person may reach (ADR 0109):
   // whether they may talk to agents, read again because a resumed run has no context of its own to carry it from.
   // Who is behind the run comes from the run in memory, and the calls it tried are read only when it made some.
@@ -119,7 +122,7 @@ test("with tools, as every production run has them (find_agent among them): with
   // 44 with the app language read before the model call above.
   // 45 with what already waits on the person, read before the model call above.
   // 46 with the agent's approvals level, read fresh where its tools are listed (ADR 0173).
-  expect(run.total).toBeLessThanOrEqual(46);
+  expect(run.total).toBeLessThanOrEqual(53);
 });
 
 test("the run keeps its stage profile in its transcript, for the operator's analytics, and adds no step", async () => {

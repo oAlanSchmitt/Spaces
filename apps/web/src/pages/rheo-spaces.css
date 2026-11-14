@@ -1,0 +1,91 @@
+.rheo-spaces__coordinator,
+.rheo-spaces__project {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.rheo-spaces__coordinator,
+.rheo-spaces__space {
+  padding: var(--card-pad);
+}
+
+.rheo-spaces__context {
+  flex: 1 1 12rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rheo-spaces__context p {
+  margin: var(--space-1) 0 0;
+}
+
+.rheo-spaces__name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.rheo-spaces__name > svg {
+  flex-shrink: 0;
+}
+
+.rheo-spaces__spaces {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.rheo-spaces__space .ac-grouphead {
+  margin-top: 0;
+}
+
+.rheo-spaces__space .ac-grouphead__title,
+.rheo-spaces__business > .ac-grouphead .ac-grouphead__title {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.rheo-spaces .ac-grouphead__note {
+  display: inline-block;
+  margin-inline-start: var(--space-2);
+  white-space: nowrap;
+}
+
+.rheo-spaces__projects {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rheo-spaces__project {
+  padding: var(--space-3) 0;
+}
+
+.rheo-spaces__project + .rheo-spaces__project {
+  border-top: 1px solid var(--line);
+}
+
+.rheo-spaces__actions {
+  flex-wrap: wrap;
+}
+
+.rheo-spaces__empty {
+  margin: 0;
+  padding-block: var(--space-2);
+}
+
+@media (max-width: 639px) {
+  .rheo-spaces__coordinator > .ac-btn,
+  .rheo-spaces__actions {
+    width: 100%;
+  }
+
+  .rheo-spaces__actions {
+    justify-content: flex-end;
+  }
+}

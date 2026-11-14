@@ -266,6 +266,8 @@ import {
   stripSentinel,
 } from "./reply-policy";
 import { routineCreatorOf, wikiPersonOf } from "./requester";
+import { assertRheoSourcesCurrent, withRheoPublication } from "./rheo-knowledge";
+import { readRheoPolicy } from "./rheo-policy";
 import {
   isRightHand,
   RIGHT_HAND_AUTO,
@@ -1060,6 +1062,10 @@ type RunJobOptions = {
  * run fails.
  */
 export async function executeRun(deps: EngineDeps, runId: string, options: RunJobOptions) {
+  const [rheoRun] = await deps.db.select({ orgId: agentRuns.orgId }).from(agentRuns).where(eq(agentRuns.id, runId));
+  if (rheoRun && (await readRheoPolicy(deps.db, rheoRun.orgId))) {
+    deps = { ...deps, context: undefined, machines: undefined, workspaceComputer: undefined };
+  }
   const prof = createProfiler();
   // A person can cancel it: the signal aborts the model stream, tools and running code.
   const abort = registerRunAbort(runId);
@@ -2027,7 +2033,7 @@ async function executeRunInner(
    * Posts as the agent where it replies, at the end of the conversation (what it writes shows whole there, once: none of
    * it went out live, ADR 0010). `note`: a line the server writes about the run (not its words).
    */
-  const post = async (
+  const postBody = async (
     tx: Executor,
     threadId: string | null,
     body: string,
@@ -2164,6 +2170,17 @@ async function executeRunInner(
     }
     return m;
   };
+  const post = (
+    tx: Executor,
+    threadId: string | null,
+    body: string,
+    meta?: Record<string, unknown>,
+    createdAt?: Date,
+    note = false,
+  ) =>
+    note
+      ? postBody(tx, threadId, body, meta, createdAt, true)
+      : withRheoPublication(tx, run.orgId, run.id, (locked) => postBody(locked, threadId, body, meta, createdAt));
   /**
    * What it says now only repeats its last message word for word: a brain sent on with a nudge (or after an
    * answer) often opens its next turn with the same line ("Vou procurar…"), and posting it again shows it twice.
@@ -2200,7 +2217,8 @@ async function executeRunInner(
     transcript.system = await teammatesNowAgain(ai, run.orgId, transcript.system);
   }
   if (!transcript) {
-    const contextDeps = deps.context;
+    const rheo = await readRheoPolicy(db, run.orgId);
+    const contextDeps = rheo ? undefined : deps.context;
     // The tools the context names are core ones: listed whatever groups the judge loads, so it needn't wait for it.
     // A connector's tool of the same name could come with a group: then it waits.
     if (judging && !granted.every((t) => isCore(t) || !CONTEXT_TOOLS.includes(t.name))) await judging;
@@ -2293,7 +2311,9 @@ async function executeRunInner(
             },
           ).catch(() => ({ text: "", pageIds: [] as string[], held: false }))
         : Promise.resolve({ text: "", pageIds: [] as string[], held: false }),
-      rulesForRun(db, run, agent).catch(() => ({ text: "", itemIds: [] as string[] })),
+      rheo
+        ? Promise.resolve({ text: "", itemIds: [] as string[] })
+        : rulesForRun(db, run, agent).catch(() => ({ text: "", itemIds: [] as string[] })),
     ]);
     await judging;
     const issueId = context.issueId;
@@ -4503,6 +4523,7 @@ async function executeRunInner(
       try {
         // A plan brain's turn costs nothing through the gateway: its person's limit is checked here.
         if (personId && turnPlan.kind !== "model") await assertPersonUnderLimit(db, run.orgId, personId);
+        await assertRheoSourcesCurrent(db, run.orgId, run.id);
         result = await thinkOnce(
           brain,
           // Memory and wiki once per run: its first turn, or a session started afresh.

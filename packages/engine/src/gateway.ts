@@ -45,7 +45,7 @@ import { maySql, type RolePermission } from "./permissions";
 import { addPersonSpend, assertPersonUnderLimit, personSpendAdded } from "./person-usage";
 import { assertCanWork, standingRefusal } from "./standing";
 import { redactCredentials } from "./tool-detail";
-import { budgetPercent, monthStartUtc, withEffectiveBudget } from "./usage";
+import { agentSpendThisMonth, budgetPercent, monthStartUtc, withEffectiveBudget } from "./usage";
 
 const {
   usageRecords,
@@ -63,6 +63,8 @@ export interface ModelGatewayDeps {
   keyWrappers: KeyWrapper[];
   providers: Record<string, ModelProvider>;
   platformCredentials: PlatformCredentials;
+  /** A subscription transport owns handled workspaces even when it is unavailable: no API fallback. */
+  subscription?: SubscriptionModel;
   now?: () => Date;
   /** Embeddings for search (optional: without it search is full-text only). */
   embeddings?: GatewayEmbeddings;
@@ -75,6 +77,12 @@ export interface ModelGatewayDeps {
     spentNanoUsd: number;
     budgetNanoUsd: number;
   }): Promise<void> | void;
+}
+
+export interface SubscriptionModel {
+  handles(orgId: string): Promise<boolean>;
+  available(orgId: string): Promise<boolean>;
+  stream(call: GatewayCall): Promise<ModelResult>;
 }
 
 export interface GatewayEmbeddings {
@@ -701,6 +709,8 @@ export function createModelGateway(deps: ModelGatewayDeps) {
      * key (a network call per key with a KMS wrapper).
      */
     async hasModelCredential(agent: Pick<Agent, "orgId" | "model" | "credentialId">): Promise<boolean> {
+      if (deps.subscription && (await deps.subscription.handles(agent.orgId)))
+        return deps.subscription.available(agent.orgId);
       const provider = modelProvider(agent.model);
       if (!provider || !deps.providers[provider]) return false;
       const usable = async (id: string) => (await usableCredentialRow(db, agent.orgId, id))?.provider === provider;
@@ -728,6 +738,83 @@ export function createModelGateway(deps: ModelGatewayDeps) {
       if (!row || row.archivedAt) throw new NotFoundError("Agent not found");
       // Every agent has a budget: its own, else the organization's default.
       const agent = await withEffectiveBudget(db, row);
+      if (deps.subscription && (await deps.subscription.handles(call.orgId))) {
+        const personId = call.personId ?? null;
+        if (personId) await assertPersonUnderLimit(db, agent.orgId, personId, now());
+        if (agent.monthlyBudgetNanoUsd !== null) {
+          const [state, recorded] = await Promise.all([
+            agentBudgetState(db, agent.orgId, agent.id, now()),
+            agentSpendThisMonth(db, agent.orgId, agent.id, now()),
+          ]);
+          const spent = Math.max(state.spentNanoUsd, recorded);
+          if (spent >= agent.monthlyBudgetNanoUsd) {
+            await budgetExhausted(agent, spent).catch(() => {});
+            throw new BudgetExceededError(agent.id, spent, agent.monthlyBudgetNanoUsd);
+          }
+        }
+        if (!(await deps.subscription.available(call.orgId)))
+          throw new MissingCredentialError("Connect Codex and validate its isolation in Spaces before continuing");
+        const maxTokens = Math.max(0, Math.min(8192, Math.floor(call.maxTokens)));
+        if (!Number.isFinite(maxTokens)) throw new ValidationError("Invalid output token limit");
+        // A native cache prewarm requests zero output; it must never start a subscription turn.
+        let result: ModelResult;
+        try {
+          result =
+            maxTokens === 0
+              ? {
+                  text: "",
+                  content: [],
+                  model: "codex-subscription",
+                  stopReason: "end_turn",
+                  usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+                }
+              : await deps.subscription.stream({ ...call, agent, maxTokens, onDelta() {} });
+        } catch (error) {
+          const partial = error instanceof ProviderError ? error.partial : undefined;
+          // Subscription failures never invent token estimates or reserve API-priced money.
+          if (partial && partial.inputTokens !== null && partial.outputTokens !== null)
+            await recordUsage(db, {
+              orgId: call.orgId,
+              agentId: agent.id,
+              kind: "agent",
+              runId: call.runId,
+              personId,
+              credentialId: null,
+              provider: "codex-subscription",
+              model: "codex-subscription",
+              requestedModel: agent.model,
+              usage: { ...partial, inputTokens: partial.inputTokens, outputTokens: partial.outputTokens },
+              reportedCost: 0,
+              partial: true,
+            });
+          throw error;
+        }
+        const { record, spent } = await settleCall({
+          agent,
+          reservation: null,
+          runId: call.runId,
+          personId,
+          credentialId: null,
+          provider: "codex-subscription",
+          model: result.model,
+          usage: result.usage,
+          reportedCost: 0,
+        });
+        await checkThresholds(agent, spent, 0);
+        await assertCanWork(db, call.orgId, call.agentId);
+        const current = await getAgent(db, call.orgId, call.agentId);
+        if (!current || current.archivedAt) throw new NotFoundError("Agent not found");
+        if (!(await deps.subscription.available(call.orgId)))
+          throw new MissingCredentialError("The Spaces subscription or workspace is no longer available");
+        if (personId) await assertPersonUnderLimit(db, agent.orgId, personId, now());
+        const effective = await withEffectiveBudget(db, current);
+        const state = await agentBudgetState(db, agent.orgId, agent.id, now());
+        if (state.spentNanoUsd >= effective.monthlyBudgetNanoUsd)
+          throw new BudgetExceededError(agent.id, state.spentNanoUsd, effective.monthlyBudgetNanoUsd);
+        if (call.signal?.aborted) throw new ProviderError("Spaces model call canceled", false);
+        if (result.text) call.onDelta(result.text);
+        return { ...result, usageRecordId: record.id, costNanoUsd: 0, maxTokens };
+      }
       const providerId = modelProvider(agent.model);
       if (!providerId) throw new ValidationError(`Model ${agent.model} is not in the catalog`);
       const provider = providerFor(providerId);
@@ -888,6 +975,7 @@ export function createModelGateway(deps: ModelGatewayDeps) {
       inputType: "document" | "query";
       kinds?: readonly SearchKind[];
     }) {
+      if (await deps.subscription?.handles(call.orgId)) return null;
       const embeddings = deps.embeddings;
       if (!embeddings || call.texts.length === 0) return null;
       const embedded = embeddings.kinds;
@@ -944,6 +1032,7 @@ export function createModelGateway(deps: ModelGatewayDeps) {
      * (`record`), as a `summary` call of the organization.
      */
     async verifyKey(input: KeyToVerify): Promise<KeyCheck> {
+      if (await deps.subscription?.handles(input.orgId)) return { state: "unchecked" };
       const provider = deps.providers[input.provider];
       if (!provider || (await standingRefusal(db, input.orgId))) return { state: "unchecked" };
       if (input.provider === "openrouter") await ensureOpenRouterModels().catch(() => {});
@@ -977,6 +1066,7 @@ export function createModelGateway(deps: ModelGatewayDeps) {
 
     /** `verifyKey` on a stored key; null when the org has no such key. The key stays here, only the result leaves. */
     async verifyStoredKey(orgId: string, credentialId: string) {
+      if (await deps.subscription?.handles(orgId)) return null;
       const credential = await decryptCredential(db, deps.keyWrappers, orgId, credentialId);
       if (!credential) return null;
       const { provider, apiKey, workspaceId, options } = credential;
@@ -1000,6 +1090,8 @@ export function createModelGateway(deps: ModelGatewayDeps) {
     /** A call for the organization (router, summaries). Not streamed to anyone; no agent budget. */
     async complete(call: OrgCall): Promise<GatewayResult> {
       await assertCanWork(db, call.orgId);
+      if (await deps.subscription?.handles(call.orgId))
+        throw new ValidationError("Spaces does not run background model services through an API provider");
       const providerId = modelProvider(call.model);
       if (!providerId) throw new ValidationError(`Model ${call.model} is not in the catalog`);
       const provider = providerFor(providerId);

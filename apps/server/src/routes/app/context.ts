@@ -22,6 +22,7 @@ import { createMiddleware } from "hono/factory";
 import { type Auth, type SessionUser, sessionUser, signInPageUrl } from "../../auth";
 import { apiError, errorResponse, validationHook } from "../../http/errors";
 import type { Logger } from "../../logger";
+import type { SpacesCodex } from "../../spaces-codex";
 import type { AppExtras } from "./extras";
 
 export interface AppDeps {
@@ -33,6 +34,7 @@ export interface AppDeps {
   wakeWorkers?: () => void;
   /** Backend services (see `extras.ts`). */
   extras?: AppExtras;
+  spacesCodex?: SpacesCodex;
   log?: Logger;
 }
 

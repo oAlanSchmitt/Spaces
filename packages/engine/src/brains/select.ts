@@ -27,6 +27,7 @@ import type { Agent } from "../agents";
 import type { MachineStatus } from "../machine-hub";
 import { pausedMessage } from "../machines";
 import { missionTurnFor } from "../missions-engine";
+import { assertRheoRun } from "../rheo-policy";
 import { isRightHand, rightHandPerson, rightHandPlanRefusal, thinkingAgent } from "../right-hand";
 import { runnerUpdateWay } from "../runner-update";
 import type { AgentRun } from "../runs";
@@ -776,10 +777,12 @@ export async function resolveBrain(
    */
   options: { fresh?: boolean; now?: Date; promptKey?: string } = {},
 ): Promise<BrainPlan> {
+  const rheo = await assertRheoRun(deps.db, run, { brain: given.brain });
   const mission: MissionTurn | null = await missionTurnFor(deps.db, run).catch(() => null);
   // The right hand: the AI of the person whose DM this is, else the workspace's; on a plan, its computer and owner.
   const agent = await thinkingAgent(deps.db, given, await rightHandPerson(deps.db, given, run));
   const kind = brainFor(agent, run, mission);
+  if (rheo) await assertRheoRun(deps.db, run, { brain: kind });
   const base = mission ? { missionId: mission.missionId } : {};
   if (kind === "model") {
     const effort = brainEffortFor(agent, kind);

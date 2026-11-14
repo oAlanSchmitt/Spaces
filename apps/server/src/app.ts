@@ -55,11 +55,14 @@ import { personUsageRoutes } from "./routes/app/person-usage";
 import { planUsageRoutes } from "./routes/app/plan-usage";
 import { pushRoutes } from "./routes/app/push";
 import { questionRoutes } from "./routes/app/questions";
+import { rheoKnowledgeRoutes } from "./routes/app/rheo-knowledge";
+import { rheoSpacesRoutes } from "./routes/app/rheo-spaces";
 import { roleRoutes } from "./routes/app/roles";
 import { routineRoutes } from "./routes/app/routines";
 import { sandboxRoutes } from "./routes/app/sandboxes";
 import { secretRoutes } from "./routes/app/secrets";
 import { skillRoutes } from "./routes/app/skills";
+import { spacesCodexRoutes } from "./routes/app/spaces-codex";
 import { storageRoutes } from "./routes/app/storage";
 import { teamWeekRoutes } from "./routes/app/team-week";
 import { telemetryRoutes } from "./routes/app/telemetry";
@@ -135,7 +138,7 @@ export interface AppOptions {
  * - everything else       web app (single-page app), when built
  */
 const APP_CSP =
-  "frame-ancestors 'none'; base-uri 'self'; frame-src 'self' blob: data: https://challenges.cloudflare.com";
+  "frame-ancestors 'none'; base-uri 'self'; frame-src 'self' blob: data: https://challenges.cloudflare.com; img-src 'self' data: blob:; media-src 'self' data: blob:; object-src 'none'";
 
 export function createApp(options: AppOptions) {
   const log = options.log ?? createLogger("warn");
@@ -176,6 +179,9 @@ export function createApp(options: AppOptions) {
     api.use("/app/organizations/:orgId/agents/:agentId/:part", agentDetailsGate(deps));
     api.use("/app/organizations/:orgId/*", readOnlyWhileDeleting(deps));
     api.route("/app", accountRoutes(deps));
+    api.route("/app", rheoSpacesRoutes(deps));
+    api.route("/app", rheoKnowledgeRoutes(deps));
+    if (deps.spacesCodex) api.route("/app", spacesCodexRoutes(deps, deps.spacesCodex));
     api.route("/app", accessRoutes(deps));
     api.route("/app", agentRoutes(deps));
     api.route("/app", chatRoutes(deps));

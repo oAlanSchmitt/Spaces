@@ -57,6 +57,8 @@ import {
 } from "./reply-policy";
 import { linePrompt } from "./reporting";
 import { wikiPersonOf } from "./requester";
+import { buildRheoRunContext } from "./rheo-context";
+import { readRheoPolicy } from "./rheo-policy";
 import { isRightHand } from "./right-hand";
 import { rightHandPrompt, rightHandTools } from "./right-hand-prompt";
 import { seatState } from "./right-hand-seats";
@@ -597,6 +599,7 @@ export async function buildRunContext(
     workspaceComputer?: WorkspaceComputer;
   },
 ): Promise<RunContext> {
+  if (await readRheoPolicy(db, run.orgId)) return buildRheoRunContext(db, run, agent, options.maxMessages);
   // Independent lookups go out together (the database may be remote); org,
   // channel and members come from the per-process cache when enabled.
   const scope = and(eq(messages.orgId, run.orgId), eq(messages.channelId, run.channelId), isNull(messages.deletedAt));

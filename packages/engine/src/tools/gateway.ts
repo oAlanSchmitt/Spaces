@@ -37,6 +37,7 @@ import { cutMarked, cutText, pgSafeJson, pgSafeText } from "../format";
 import { mergeReposOfCall, recordMergeDone, reposOfGithubCall } from "../git/repos";
 import { recordRead } from "../outbound";
 import { routineCreatorOf } from "../requester";
+import { allowRheoTool, assertRheoRun } from "../rheo-policy";
 import { isRightHand, RIGHT_HAND_NOT_OFFERED } from "../right-hand";
 import type { RoutineBrief } from "../routine-brief";
 import { keysOfCall, RUN_CODE_TOOL, routineKeysAllowed, routineKeysKind } from "../routine-keys";
@@ -84,7 +85,15 @@ import {
   NOT_IN_ALL,
   toolAccess,
 } from "./scopes";
-import type { AheadOutcome, AheadRequest, ToolContext, ToolDefinition, ToolOutput, ToolSource } from "./types";
+import {
+  type AheadOutcome,
+  type AheadRequest,
+  RHEO_INTERNAL_TOOL,
+  type ToolContext,
+  type ToolDefinition,
+  type ToolOutput,
+  type ToolSource,
+} from "./types";
 
 const { approvals, agents, agentRunSteps, routines } = schema;
 type AuditOutcome = schema.AuditOutcome;
@@ -560,17 +569,43 @@ export function createToolGateway(deps: {
 }) {
   const now = deps.now ?? (() => new Date());
 
+  const rheoPolicyOf = (ctx: ToolContext) =>
+    assertRheoRun(
+      ctx.db,
+      {
+        id: ctx.runId,
+        orgId: ctx.orgId,
+        agentId: ctx.agentId,
+        channelId: ctx.channelId,
+        threadRootId: ctx.threadRootId,
+        triggerMessageId: ctx.triggerMessageId,
+      },
+      { bridge: ctx.bridge },
+    );
+
+  const rheoRefusal = (): ToolOutput => ({
+    content: "This tool is not available in this protected workspace",
+    isError: true,
+    data: { code: "rheo.tool_denied" },
+  });
+
   async function allTools(ctx: ToolContext) {
     const byName = new Map<string, ToolDefinition>();
+    const policy = await rheoPolicyOf(ctx);
     const rightHand = isRightHand(await getAgentCached(ctx.db, ctx.orgId, ctx.agentId));
     for (const source of deps.sources) {
+      if (policy && source.rheoInternal !== RHEO_INTERNAL_TOOL) continue;
       for (const tool of await source.tools(ctx)) {
+        if (policy && !allowRheoTool(policy, tool)) continue;
         if (!TOOL_NAME.test(tool.name)) continue;
         if (rightHand && RIGHT_HAND_NOT_OFFERED.has(tool.name)) continue;
         const current = byName.get(tool.name);
         // A connected MCP server must not shadow one of our own tools just
         // because its source appears earlier in the list.
-        if (!current || (current.connectionId && ownTool(tool))) byName.set(tool.name, tool);
+        if (!current || (current.connectionId && ownTool(tool))) {
+          // Approval exemptions come from the gateway, never from a protected source's definition.
+          byName.set(tool.name, policy ? { ...tool, unasked: false } : tool);
+        }
       }
     }
     return byName;
@@ -656,7 +691,9 @@ export function createToolGateway(deps: {
    * `use_tool` (tools/directory.ts).
    */
   async function list(ctx: ToolContext): Promise<ToolDefinition[]> {
-    return presentTools(await granted(ctx), isSensitive, ctx.loadedGroups);
+    const policy = await rheoPolicyOf(ctx);
+    const tools = await granted(ctx);
+    return policy ? tools : presentTools(tools, isSensitive, ctx.loadedGroups);
   }
 
   /** A connector's call counts toward its usage (ADR 0103), whatever it returned. `approvalsGiven` 1: an approved one. */
@@ -676,6 +713,8 @@ export function createToolGateway(deps: {
   }
 
   async function outputOf(tool: ToolDefinition, input: Record<string, unknown>, ctx: ToolContext): Promise<ToolOutput> {
+    const policy = await rheoPolicyOf(ctx);
+    if (policy && !allowRheoTool(policy, tool)) return rheoRefusal();
     const done = startInFlight(`tool ${tool.name}`, ctx.runId);
     try {
       const output = await tool.execute(input, ctx);
@@ -1057,6 +1096,11 @@ export function createToolGateway(deps: {
     granted,
 
     async invoke(ctx: ToolContext, raw: ToolCall): Promise<InvokeResult> {
+      const policy = await rheoPolicyOf(ctx);
+      if (policy) {
+        const tool = (await allTools(ctx)).get(raw.name);
+        if (!tool || !allowRheoTool(policy, tool)) return { type: "result", output: rheoRefusal() };
+      }
       // The model's arguments land in jsonb and text columns (steps, approvals, the audit): a NUL would fail them.
       const requested = { ...raw, input: pgSafeJson(raw.input) };
       // Who is behind the run decides what it may do: listing already hid refused tools, this is the call.
@@ -1586,6 +1630,11 @@ export function createToolGateway(deps: {
      * ahead waits for its time instead: the routine's run then does it (`aheadFor`), and this run hears when.
      */
     async executeApproved(ctx: ToolContext, approval: Approval): Promise<ToolOutput> {
+      const policy = await rheoPolicyOf(ctx);
+      if (policy) {
+        const tool = (await allTools(ctx)).get(approval.tool);
+        if (!tool || !allowRheoTool(policy, tool)) return rheoRefusal();
+      }
       const runAt = approval.runAt;
       if (approval.status === "approved" && runAt) return { content: await aheadNote(ctx, { ...approval, runAt }) };
       return runApproved(ctx, approval, approval.toolUseId);
