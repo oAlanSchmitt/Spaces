@@ -21,6 +21,7 @@ import { useTranslation } from "react-i18next";
 import { ErrorState, LoadingList } from "@/components/Loading";
 import { RheoKnowledgeDialog } from "@/components/RheoKnowledgeDialog";
 import { SpacesCodexConnection } from "@/components/SpacesCodexConnection";
+import { SpacesCodexHandoff } from "@/components/SpacesCodexHandoff";
 import {
   type RheoCreate,
   type RheoOverview,
@@ -39,6 +40,7 @@ export function RheoSpacesPage({ onPrepared }: { onPrepared?: (controlOrgId: str
   const list = useQuery({ queryKey, queryFn: rheoSpacesApi.overview, enabled: Boolean(me) });
   const [creating, setCreating] = useState<RheoCreate | null>(null);
   const [knowledge, setKnowledge] = useState<RheoProject | null>(null);
+  const [handoff, setHandoff] = useState<RheoProject | null>(null);
   const refresh = async () => {
     await Promise.all([client.invalidateQueries({ queryKey }), client.invalidateQueries({ queryKey: keys.me })]);
   };
@@ -180,6 +182,15 @@ export function RheoSpacesPage({ onPrepared }: { onPrepared?: (controlOrgId: str
                                 <Button
                                   size="sm"
                                   variant="link"
+                                  aria-label={t("rheoSpaces.handoff.openName", { name: project.name })}
+                                  disabled={project.state === "archived"}
+                                  onClick={() => setHandoff(project)}
+                                >
+                                  {t("rheoSpaces.handoff.open")}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="link"
                                   aria-label={t("rheoSpaces.knowledge.openName", { name: project.name })}
                                   onClick={() => setKnowledge(project)}
                                 >
@@ -232,6 +243,7 @@ export function RheoSpacesPage({ onPrepared }: { onPrepared?: (controlOrgId: str
         />
       )}
       {knowledge && <RheoKnowledgeDialog project={knowledge} onClose={() => setKnowledge(null)} />}
+      {handoff && <SpacesCodexHandoff project={handoff} onClose={() => setHandoff(null)} />}
       <p className="page-description">
         Based on{" "}
         <a href="https://agentes.chat" target="_blank" rel="noreferrer">

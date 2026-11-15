@@ -138,6 +138,7 @@ export function cssSheets(order: "app" | "reverse" = "app") {
   const main = readFileSync(join(WEB, "src/styles.css"), "utf8");
   const inMain = (file: string) => main.includes(`"./${file.replace(/^src\//, "")}"`);
   const rest = [...new Bun.Glob("src/**/*.css").scanSync(WEB)]
+    .map((file) => file.replaceAll("\\", "/"))
     .filter((f) => f !== "src/styles.css" && !inMain(f))
     .sort();
   return order === "app" ? ["src/styles.css", ...rest] : [...rest.reverse(), "src/styles.css"];

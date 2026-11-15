@@ -6,6 +6,7 @@ Esta versão é um **piloto protegido**: comandos, browser, conectores externos,
 
 - [Decisões e âmbito](docs/rheo-spaces/DESIGN.md)
 - [Como utilizar o Spaces](docs/rheo-spaces/USAGE.md)
+- [Pasta associada e briefing para Codex](docs/rheo-spaces/CODEX-HANDOFF.md)
 - [Executar e recuperar no Windows](docs/rheo-spaces/RUNTIME.md)
 - [Plano de execução](docs/superpowers/plans/2026-11-14-rheo-spaces.md)
 - [Progresso e evidências](docs/rheo-spaces/PROGRESS.md)

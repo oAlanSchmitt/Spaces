@@ -24,3 +24,11 @@
 - O URL relativo da resposta apareceu como Markdown literal. A ferramenta passou a usar o helper nativo `appPageLink`, conservando `SAFE_URL`: teste RED→GREEN, 3 testes/14 asserções e tipos de engine/server sem erros. Não foi repetido um clique numa nova resposta de modelo com URL absoluto.
 - Após a interrupção, o PID 26288 retomou com saúde OK mas prova incompatível: o ambiente herdava PATH efémero. A factory agora fixa apenas System32/WindowsPowerShell no PATH do filho, preservando as permissões e o validador. RED→GREEN e 25 testes/106 asserções, Biome e tipos server passaram. Maquiavel reviu a correção e não recomendou novas capacidades.
 - Fecho operacional: PID 26288 saiu limpo e PID 44740 ficou ready às 23:38:07 UTC. O probe do próprio daemon às 23:38:14 passou 13/13 e calculou o mesmo digest `f3931e9a…fdc00b` da nova prova nativa. A interface mostrou **Pronto para usar**; captura privada `.rheo/screenshots/Spaces-final.jpg`, recibo `.rheo/pilot-final-recovery.json`. O oficial em 4310 recusou conexão na última consulta, sem ser reiniciado ou modificado. PIDs são observações históricas; commit/envio são registados no Git.
+
+## 15/11/2026 — Pasta associada e briefing para Codex
+
+Primeira opção escolhida pelo utilizador e implementada: três metadados opcionais por projeto, GET/PUT autorizados por dono e diálogo **Continuar no Codex** no catálogo e na conversa. O briefing determinístico reutiliza fontes aprovadas e proveniência, com janela/orçamento explícitos. Não há leitura da pasta, execução ou chamada de modelo. Migração 0274 aditiva, anteriores preservadas.
+
+Verificação integrada: 60 testes alvo, tipos de quatro pacotes, lint, fronteiras, migrações e builds passaram. Ponytail/REA reviram o diff, e Maquiavel recomendou fechar esta opção. O caso de controlos no caminho foi corrigido; a normalização de separadores Windows reparou uma falha anterior na verificação de geometria, sem alterar CSS global.
+
+Backup frio privado de 2035 ficheiros, saída limpa e PID 3964 ready às 00:32:01 UTC. Probe Codex 13/13 com digest preservado, sem novo turn diagnóstico. Browser confirmou persistência, outro projeto sem herança, fonte aprovada, clipboard igual à prévia e layout a 1280/390/320. Detalhes, limites e capturas em [CODEX-HANDOFF.md](CODEX-HANDOFF.md); instruções em [USAGE.md](USAGE.md).

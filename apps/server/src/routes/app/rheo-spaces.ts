@@ -3,7 +3,9 @@ import {
   createRheoBusiness,
   createRheoProject,
   createRheoSpace,
+  getRheoProjectHandoff,
   listRheoSpaces,
+  prepareRheoProjectHandoff,
   setRheoProjectState,
 } from "@agenteschat/engine";
 import { createRoute, z } from "@hono/zod-openapi";
@@ -14,6 +16,13 @@ const Name = z.string().trim().min(1).max(80);
 const State = z.enum(["active", "archived"]);
 const Named = z.object({ id: z.uuid(), name: z.string() });
 const Project = Named.extend({ orgId: z.uuid(), channelId: z.uuid(), state: State });
+const Handoff = z
+  .object({
+    folderPath: z.string().max(2000).nullable(),
+    objective: z.string().max(4000),
+    criteria: z.string().max(4000),
+  })
+  .strict();
 const Overview = z.object({
   controlOrgId: z.uuid().nullable(),
   controlChannelId: z.uuid().nullable(),
@@ -121,6 +130,44 @@ export function rheoSpacesRoutes(deps: AppDeps) {
           c.req.valid("json").state,
           deps.adapters.pubsub,
         ),
+        200,
+      ),
+  );
+  app.openapi(
+    createRoute({
+      method: "get",
+      path: "/spaces/projects/{projectId}/handoff",
+      tags,
+      security,
+      summary: "Read your project's Codex handoff references",
+      request: { params: z.object({ projectId: z.uuid() }) },
+      responses: { 200: json(Handoff), ...errors },
+    }),
+    async (c) => c.json(await getRheoProjectHandoff(deps.db, c.get("user").id, c.req.valid("param").projectId), 200),
+  );
+
+  app.openapi(
+    createRoute({
+      method: "put",
+      path: "/spaces/projects/{projectId}/handoff",
+      tags,
+      security,
+      summary: "Save project references and prepare a portable Codex briefing",
+      request: { params: z.object({ projectId: z.uuid() }), body: body(Handoff) },
+      responses: {
+        200: json(
+          Handoff.extend({
+            briefing: z.string(),
+            entryIds: z.array(z.uuid()),
+            omittedCount: z.number().int().nonnegative(),
+          }),
+        ),
+        ...errors,
+      },
+    }),
+    async (c) =>
+      c.json(
+        await prepareRheoProjectHandoff(deps.db, c.get("user").id, c.req.valid("param").projectId, c.req.valid("json")),
         200,
       ),
   );

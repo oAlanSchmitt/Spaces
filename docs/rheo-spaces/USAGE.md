@@ -38,6 +38,18 @@ As entradas mais recentes aparecem primeiro. **Carregar mais** permite consultar
 
 Os **Itens de ação** são registos no Conhecimento do projeto. Não são os cartões do quadro nativo **Tarefas** e não iniciam trabalho de código ou ações externas.
 
+## Associar uma pasta e continuar no Codex
+
+No cartão do projeto ou na sua conversa, abra **Continuar no Codex**. Indique a pasta no computador em que pretende trabalhar, o objetivo da próxima tarefa e os critérios de entrega. Guarde e prepare o briefing, reveja a prévia e copie o texto para a conversa correspondente no Codex.
+
+O caminho é uma referência: o Spaces não verifica se a pasta existe, não lê os seus ficheiros e não cria pastas ou repositórios. Limpar o campo remove a associação. O vínculo não dá acesso à pasta aos agentes nem inicia o Codex automaticamente.
+
+O briefing inclui o destino, o objetivo, os critérios e conhecimento aprovado para a equipa deste projeto. Conteúdo **Só para mim**, memórias propostas e fontes arquivadas ou revogadas não entram nessa recuperação. A janela contém até 100 entradas recentes e a secção de conhecimento tem orçamento de 12000 caracteres; cortes e omissões são indicados no texto. Não é uma exportação integral do acervo nem do histórico da conversa.
+
+O texto é uma fotografia do contexto na preparação. Se fontes ou instruções mudarem, prepare-o novamente. Uma cópia já feita não é atualizada nem revogada à distância. Se a cópia automática falhar, selecione o texto da prévia e copie manualmente.
+
+Trabalhe na pasta pelo Codex e devolva ao projeto o resultado revisto, as verificações e a referência do commit, quando existir. Projetos arquivados não preparam novo trabalho.
+
 ## IA e limites do piloto
 
 Em **Codex por assinatura**, ligue a conta pela página oficial. A autenticação usa um perfil próprio deste fork e não copia a sessão da instalação original. Só **Pronto para usar** significa que a ligação e as verificações exigidas estão satisfeitas. Uma conta ligada com isolamento pendente ainda não habilita os agentes.

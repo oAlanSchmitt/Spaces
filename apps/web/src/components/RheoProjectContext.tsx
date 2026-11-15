@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useOrg } from "@/components/org-context";
 import { RheoKnowledgeDialog } from "@/components/RheoKnowledgeDialog";
+import { SpacesCodexHandoff } from "@/components/SpacesCodexHandoff";
 import { rheoOverviewKey, rheoSpacesApi } from "@/lib/rheo-spaces";
 import "./rheo-knowledge.css";
 
@@ -13,6 +14,7 @@ export function RheoProjectContext() {
   const { org, me } = useOrg();
   const { t } = useTranslation();
   const [knowledge, setKnowledge] = useState(false);
+  const [handoff, setHandoff] = useState<string | null>(null);
   const overview = useQuery({
     queryKey: rheoOverviewKey(me.user.id),
     queryFn: rheoSpacesApi.overview,
@@ -46,6 +48,14 @@ export function RheoProjectContext() {
         <Button size="sm" variant="link" onClick={() => setKnowledge(true)}>
           {t("rheoSpaces.knowledge.open")}
         </Button>
+        <Button
+          size="sm"
+          variant="link"
+          disabled={context.project.state === "archived"}
+          onClick={() => setHandoff(context.project.id)}
+        >
+          {t("rheoSpaces.handoff.open")}
+        </Button>
       </nav>
       {knowledge && (
         <RheoKnowledgeDialog
@@ -53,6 +63,9 @@ export function RheoProjectContext() {
           project={context.project}
           onClose={() => setKnowledge(false)}
         />
+      )}
+      {handoff === context.project.id && (
+        <SpacesCodexHandoff project={context.project} onClose={() => setHandoff(null)} />
       )}
     </>
   );

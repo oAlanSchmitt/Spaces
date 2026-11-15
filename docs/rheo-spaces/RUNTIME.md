@@ -110,4 +110,10 @@ Um único novo turn diagnóstico às **23:36:26 UTC** revalidou a configuração
 
 O PID 26288 saiu graciosamente com código 0; **PID 44740** ficou ready às **23:38:07 UTC**, com saúde/DB OK. O probe do próprio daemon `16114d98-d3f5-4d84-b594-e3babea16d9a`, às 23:38:14, passou 13/13 com o mesmo digest `f3931e9a…fdc00b`. O coordenador observou **Pronto para usar** na interface e guardou `.rheo/screenshots/Spaces-final.jpg`. Recibo privado `.rheo/pilot-final-recovery.json`. A última consulta ao oficial em 4310 recusou conexão; ele não foi reiniciado nem alterado.
 
+## Atualização de pasta e briefing — 15/11/2026
+
+A migração aditiva 0274 acrescentou os metadados de continuidade do projeto. Antes do arranque, o PID 44740 saiu graciosamente e o backup privado `.rheo/backups/20261115T003032470Z-cfb0538eda6c4efab556934e65d9e34e` foi verificado com 2035 ficheiros. Não é cifrado e não inclui código ou autenticação Codex. O PID 3964 ficou ready às 00:32:01 UTC, com saúde e DB OK; recibo `.rheo/handoff-maintenance.json`.
+
+O probe normal `a963254a-d1b0-46c4-94cf-3c6b91fa4d29`, às 00:32:10 UTC, passou 13/13 com digest `f3931e9a1caa2f3a76f7e47b5e465e1bfef18a1bb32007b28fbca0eb43fdc00b`. A UI mostrou Pronto para usar. Transporte, permissões, workspace e perfil não mudaram; a prova nativa existente permaneceu aplicável, sem novo turno diagnóstico. O fluxo de pasta/briefing foi verificado no browser com dados sintéticos, sem aceder à pasta indicada. A instalação oficial não foi alterada.
+
 **Resumo para validar:** quatro comandos locais isolam arranque, encerramento gracioso, backup privado e restauro para pasta nova. A instalação oficial permanece preservada; uso com dados reais depende de piloto funcional e recuperação verificada.

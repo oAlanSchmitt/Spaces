@@ -40,8 +40,21 @@ export interface RheoKnowledge {
   state: "active" | "archived";
 }
 
+export interface RheoHandoffConfig {
+  folderPath: string | null;
+  objective: string;
+  criteria: string;
+}
+
+export interface RheoHandoff extends RheoHandoffConfig {
+  briefing: string;
+  entryIds: string[];
+  omittedCount: number;
+}
+
 export const rheoOverviewKey = (userId: string) => ["rheo-spaces", userId] as const;
 export const rheoKnowledgeKey = (userId: string, orgId: string) => ["rheo-knowledge", userId, orgId] as const;
+export const rheoHandoffKey = (userId: string, projectId: string) => ["rheo-handoff", userId, projectId] as const;
 
 export type RheoCreate =
   | { kind: "business" }
@@ -64,6 +77,10 @@ export const rheoSpacesApi = {
   },
   setState: (project: RheoProject, state: RheoProject["state"]) =>
     request<RheoProject>(`${base}/projects/${encodeURIComponent(project.id)}`, { method: "PATCH", json: { state } }),
+  handoff: (projectId: string, signal?: AbortSignal) =>
+    request<RheoHandoffConfig>(`${base}/projects/${encodeURIComponent(projectId)}/handoff`, { signal }),
+  prepareHandoff: (projectId: string, input: RheoHandoffConfig) =>
+    request<RheoHandoff>(`${base}/projects/${encodeURIComponent(projectId)}/handoff`, { method: "PUT", json: input }),
   knowledge: (orgId: string, beforeId?: string) =>
     request<RheoKnowledge>(
       `${base}/workspaces/${encodeURIComponent(orgId)}/knowledge${beforeId ? `?before=${encodeURIComponent(beforeId)}` : ""}`,

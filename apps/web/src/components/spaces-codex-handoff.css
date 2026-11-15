@@ -1,0 +1,8 @@
+.spaces-codex-handoff .ac-dialog__desc {
+  overflow-wrap: anywhere;
+}
+
+.spaces-codex-handoff__preview {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
