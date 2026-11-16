@@ -1,6 +1,7 @@
 {
   "app": {
     "pt-BR": [
+      "rheoSpaces.nav",
       "usageViews.logins",
       "chat.wait.said",
       "access.area.skills",

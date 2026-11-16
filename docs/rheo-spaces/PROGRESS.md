@@ -1,5 +1,20 @@
 # Execução — Spaces
 
+## Estado atual — 16/11/2026
+
+- Evolução autorizada e implementada: Área → Espaço → Projeto, base comum canónica por Espaço, contexto específico do projeto e trabalho/imagens na própria conversa.
+- Reutilização do `CodexAppServers`, artefactos e Design System existentes, sem novas dependências de aplicação. Associação explícita da pasta e execução condicionada ao perfil local verificado. Briefing mantido como alternativa auxiliar.
+- Migrações aditivas 0275/0276, com snapshots novos e anteriores imutáveis. Backup privado verificado antes de migrar.
+- Conhecimento comum observado em dois projetos do mesmo Espaço e ausente num terceiro de outro Espaço. Fontes existentes continuam locais. Revisão/revogação conservam proveniência e invalidam contexto derivado.
+- Código real às 13:21: três ficheiros e três testes CMD aprovados, com saída 0 e cartões na conversa. Imagem nativa real às 13:24: PNG 1672 × 941 entregue e aberto no visualizador do projeto.
+- A primeira tentativa de trabalho revelou `environments: []` a desativar o ambiente nativo. Corrigido com contrato local explícito partilhado entre runner/probe/fingerprint; prova v2 rejeita a anterior e passou 15/15 controlos reais. [Cronologia e limites](RUNTIME.md).
+- Auditorias Ponytail/REA corrigiram sessão antiga, fronteiras, ambiente, cancelamento, escrita de imagem e apresentação dos resultados. [Revisão da evolução](AUDIT-EVOLUTION-PONYTAIL.md). [Maquiavel](MAQUIAVEL.md) não identificou outra funcionalidade necessária neste âmbito.
+- Reinício final observado: PID 13408. A interface confirmou persistência do conhecimento, pasta e quatro artefactos. Capturas a 1280/390/320, sem transbordo observado, e viewport reposta.
+- 74 testes UI/client/geometria e 18 testes finais serviço/probe/prova passaram. Tipos, Biome, migrations, boundaries e builds passaram. Não somar lotes sobrepostos dos relatórios históricos. Idiomas além de português/inglês continuam com as lacunas Spaces já existentes no fork; testes POSIX não executados no Windows.
+- Ensaio sintético concluído. Aceitação humana, dados reais, outros runtimes e capacidade/quota futura da conta não são demonstrados por estes resultados. [Como utilizar](USAGE.md).
+
+## Registo histórico do piloto inicial
+
 - Autorização: pedido do utilizador nesta conversa para criar fork e aplicar mudanças, incluindo criação interna de projetos.
 - Fork: https://github.com/oAlanSchmitt/Spaces
 - Base: 071026d41f293d26cca480874cad5f66658d716c; branch feat/spaces.

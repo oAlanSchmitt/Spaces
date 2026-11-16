@@ -2,11 +2,26 @@ import type { RheoEntry } from "./rheo-knowledge";
 import { neutralizeUntrusted } from "./untrusted";
 
 /** Budget the complete JSON before recording sources or applying the external-data envelope. */
-export function rheoEntryPayload(rows: Pick<RheoEntry, "id" | "kind" | "title" | "body">[], maxChars: number) {
-  const entries: { id: string; kind: string; title: string; body: string; truncated: boolean }[] = [];
+export function rheoEntryPayload(
+  rows: Pick<RheoEntry, "id" | "kind" | "title" | "body" | "orgId" | "spaceId" | "revision">[],
+  maxChars: number,
+) {
+  const entries: {
+    id: string;
+    orgId: string;
+    spaceId: string | null;
+    revision: number;
+    kind: string;
+    title: string;
+    body: string;
+    truncated: boolean;
+  }[] = [];
   for (const row of rows) {
     const entry = {
       id: row.id,
+      orgId: row.orgId,
+      spaceId: row.spaceId,
+      revision: row.revision,
       kind: row.kind,
       title: neutralizeUntrusted(row.title),
       body: neutralizeUntrusted(row.body),

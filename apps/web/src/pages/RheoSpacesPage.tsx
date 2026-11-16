@@ -22,10 +22,12 @@ import { ErrorState, LoadingList } from "@/components/Loading";
 import { RheoKnowledgeDialog } from "@/components/RheoKnowledgeDialog";
 import { SpacesCodexConnection } from "@/components/SpacesCodexConnection";
 import { SpacesCodexHandoff } from "@/components/SpacesCodexHandoff";
+import { SpacesProjectWork } from "@/components/SpacesProjectWork";
 import {
   type RheoCreate,
   type RheoOverview,
   type RheoProject,
+  type RheoSpace,
   rheoOverviewKey,
   rheoSpacesApi,
 } from "@/lib/rheo-spaces";
@@ -40,7 +42,9 @@ export function RheoSpacesPage({ onPrepared }: { onPrepared?: (controlOrgId: str
   const list = useQuery({ queryKey, queryFn: rheoSpacesApi.overview, enabled: Boolean(me) });
   const [creating, setCreating] = useState<RheoCreate | null>(null);
   const [knowledge, setKnowledge] = useState<RheoProject | null>(null);
+  const [spaceKnowledge, setSpaceKnowledge] = useState<RheoSpace | null>(null);
   const [handoff, setHandoff] = useState<RheoProject | null>(null);
+  const [work, setWork] = useState<RheoProject | null>(null);
   const refresh = async () => {
     await Promise.all([client.invalidateQueries({ queryKey }), client.invalidateQueries({ queryKey: keys.me })]);
   };
@@ -164,6 +168,16 @@ export function RheoSpacesPage({ onPrepared }: { onPrepared?: (controlOrgId: str
                           </Button>
                         }
                       />
+                      <div className="rheo-spaces__space-knowledge">
+                        <Button
+                          size="sm"
+                          variant="link"
+                          aria-label={t("rheoSpaces.knowledge.spaceOpenName", { name: space.name })}
+                          onClick={() => setSpaceKnowledge(space)}
+                        >
+                          {t("rheoSpaces.knowledge.sharedOpen")}
+                        </Button>
+                      </div>
                       {space.projects.length === 0 ? (
                         <p className="muted small rheo-spaces__empty">{t("rheoSpaces.noProjects")}</p>
                       ) : (
@@ -182,11 +196,10 @@ export function RheoSpacesPage({ onPrepared }: { onPrepared?: (controlOrgId: str
                                 <Button
                                   size="sm"
                                   variant="link"
-                                  aria-label={t("rheoSpaces.handoff.openName", { name: project.name })}
-                                  disabled={project.state === "archived"}
-                                  onClick={() => setHandoff(project)}
+                                  aria-label={t("rheoSpaces.work.openName", { name: project.name })}
+                                  onClick={() => setWork(project)}
                                 >
-                                  {t("rheoSpaces.handoff.open")}
+                                  {t("rheoSpaces.work.open")}
                                 </Button>
                                 <Button
                                   size="sm"
@@ -243,7 +256,20 @@ export function RheoSpacesPage({ onPrepared }: { onPrepared?: (controlOrgId: str
         />
       )}
       {knowledge && <RheoKnowledgeDialog project={knowledge} onClose={() => setKnowledge(null)} />}
+      {spaceKnowledge && (
+        <RheoKnowledgeDialog key={spaceKnowledge.id} space={spaceKnowledge} onClose={() => setSpaceKnowledge(null)} />
+      )}
       {handoff && <SpacesCodexHandoff project={handoff} onClose={() => setHandoff(null)} />}
+      {work && (
+        <SpacesProjectWork
+          project={work}
+          onClose={() => setWork(null)}
+          onHandoff={() => {
+            setHandoff(work);
+            setWork(null);
+          }}
+        />
+      )}
       <p className="page-description">
         Based on{" "}
         <a href="https://agentes.chat" target="_blank" rel="noreferrer">

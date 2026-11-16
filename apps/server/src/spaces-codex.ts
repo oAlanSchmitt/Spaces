@@ -20,6 +20,7 @@ import { laidOut, type ModelResult, type ModelUsage, ProviderError } from "@agen
 import { CodexAppClient, type ServerRequestHandler } from "../runner/brain-codex-app";
 import { readSpacesNativeProof } from "./spaces-codex-native-proof";
 import { probeSpacesCodex } from "./spaces-codex-probe";
+import { createSpacesWork } from "./spaces-work";
 
 /** Audited against the JSON schemas shipped by this installed CLI, not a floating minimum version. */
 export const SPACES_CODEX_VERSION = "0.167.0-alpha.4.1";
@@ -35,6 +36,7 @@ const INTERNAL_TOOLS = new Set([
   "rheo_memory",
   "rheo_documents",
   "rheo_tasks",
+  "rheo_work",
 ]);
 const object = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const number = (v: unknown) => (typeof v === "number" && Number.isSafeInteger(v) && v >= 0 ? v : 0);
@@ -464,6 +466,15 @@ export function createSpacesCodex(options: Options) {
   if (!path.isAbsolute(options.home)) throw new Error("Spaces Codex requires an explicit absolute data home");
   const command = options.command === undefined ? Bun.which("codex") : options.command;
   const workspace = path.join(options.home, "workspace");
+  let accountQueue: Promise<unknown> = Promise.resolve();
+  const exclusive = <T>(work: () => Promise<T>): Promise<T> => {
+    const next = accountQueue.catch(() => undefined).then(work);
+    accountQueue = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  };
   const factory = options.createClient ?? createSpacesCodexRpc;
   let runtime: Promise<{
     client: SpacesCodexRpc;
@@ -628,66 +639,102 @@ export function createSpacesCodex(options: Options) {
       return status.connected && status.compatible && status.sandbox === "ready";
     },
     async stream(call) {
-      if (call.signal?.aborted) throw new ProviderError("Spaces subscription call canceled", false);
-      const validate = async () => {
-        const [run] = call.runId
-          ? await options.db
-              .select()
-              .from(schema.agentRuns)
-              .where(
-                and(
-                  eq(schema.agentRuns.id, call.runId),
-                  eq(schema.agentRuns.orgId, call.orgId),
-                  eq(schema.agentRuns.agentId, call.agentId),
-                ),
-              )
-          : [];
-        if (!run) throw new ForbiddenError("Spaces subscription requires a current owner-requested run");
-        const policy = await assertRheoRun(options.db, run);
-        if (!policy || call.personId !== policy.ownerUserId)
-          throw new ForbiddenError("Spaces subscription authority is unavailable");
-        await authorize(policy.ownerUserId);
-        await assertRheoSourcesCurrent(options.db, call.orgId, run.id);
-      };
-      await validate();
-      if (!(await subscription.available(call.orgId)))
-        throw new MissingCredentialError("Connect Codex and validate isolation in Spaces first");
-      const current = await getRuntime();
-      const fingerprint = await inspect();
-      if (
-        !current ||
-        fingerprint.version !== current.fingerprint.version ||
-        fingerprint.executableSha256 !== current.fingerprint.executableSha256
-      )
-        throw new ProviderError(
-          "Codex changed since its isolation was validated. Restart Spaces to validate it again.",
-          false,
-        );
-      const client = await factory({ command: command as string, home: options.home, workspace });
-      const abort = () => client.close(0);
-      call.signal?.addEventListener("abort", abort, { once: true });
-      try {
+      return exclusive(async () => {
         if (call.signal?.aborted) throw new ProviderError("Spaces subscription call canceled", false);
-        const result = await runSpacesCodexTurn(client, call, { workspace });
-        try {
-          await validate();
-        } catch {
+        const validate = async () => {
+          const [run] = call.runId
+            ? await options.db
+                .select()
+                .from(schema.agentRuns)
+                .where(
+                  and(
+                    eq(schema.agentRuns.id, call.runId),
+                    eq(schema.agentRuns.orgId, call.orgId),
+                    eq(schema.agentRuns.agentId, call.agentId),
+                  ),
+                )
+            : [];
+          if (!run) throw new ForbiddenError("Spaces subscription requires a current owner-requested run");
+          const policy = await assertRheoRun(options.db, run);
+          if (!policy || call.personId !== policy.ownerUserId)
+            throw new ForbiddenError("Spaces subscription authority is unavailable");
+          await authorize(policy.ownerUserId);
+          await assertRheoSourcesCurrent(options.db, call.orgId, run.id);
+        };
+        await validate();
+        if (!(await subscription.available(call.orgId)))
+          throw new MissingCredentialError("Connect Codex and validate isolation in Spaces first");
+        const current = await getRuntime();
+        const fingerprint = await inspect();
+        if (
+          !current ||
+          fingerprint.version !== current.fingerprint.version ||
+          fingerprint.executableSha256 !== current.fingerprint.executableSha256
+        )
           throw new ProviderError(
-            "The Spaces response was withheld because its authority or sources changed",
+            "Codex changed since its isolation was validated. Restart Spaces to validate it again.",
             false,
-            403,
-            { ...result.usage, outputChars: result.text.length },
           );
+        const client = await factory({ command: command as string, home: options.home, workspace });
+        const abort = () => client.close(0);
+        call.signal?.addEventListener("abort", abort, { once: true });
+        try {
+          if (call.signal?.aborted) throw new ProviderError("Spaces subscription call canceled", false);
+          const result = await runSpacesCodexTurn(client, call, { workspace });
+          try {
+            await validate();
+          } catch {
+            throw new ProviderError(
+              "The Spaces response was withheld because its authority or sources changed",
+              false,
+              403,
+              { ...result.usage, outputChars: result.text.length },
+            );
+          }
+          return result;
+        } finally {
+          call.signal?.removeEventListener("abort", abort);
+          client.close(0);
         }
-        return result;
-      } finally {
-        call.signal?.removeEventListener("abort", abort);
-        client.close(0);
-      }
+      });
     },
   };
+  const work = createSpacesWork({
+    db: options.db,
+    home: options.home,
+    exclusive,
+    async identity(userId) {
+      await authorize(userId);
+      const current = await getRuntime();
+      const fresh = await inspect();
+      if (
+        !current?.status.loginAvailable ||
+        fresh.version !== current.fingerprint.version ||
+        fresh.executableSha256 !== current.fingerprint.executableSha256
+      )
+        throw new ValidationError("O Codex mudou ou a ligação não é compatível.");
+      const response = await current.client.request<unknown>("account/read", { refreshToken: false });
+      const account = object(response) && object(response.account) ? response.account : null;
+      if (account?.type !== "chatgpt" || !string(account.email))
+        throw new MissingCredentialError("Ligue a assinatura ChatGPT existente no Spaces.");
+      return {
+        ...fresh,
+        command: command as string,
+        accountFingerprint: createHash("sha256")
+          .update(
+            JSON.stringify({
+              type: account.type,
+              email: account.email,
+              id: account.id ?? account.chatgptAccountId ?? null,
+            }),
+          )
+          .digest("hex"),
+      };
+    },
+  });
   return {
     subscription,
+    work,
     async status(userId: string) {
       await authorize(userId);
       return metadata();
@@ -722,6 +769,7 @@ export function createSpacesCodex(options: Options) {
       return { authUrl: url.href };
     },
     stop() {
+      work.stop();
       void runtime?.then((current) => current.client.close(0)).catch(() => {});
       runtime = null;
     },

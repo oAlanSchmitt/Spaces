@@ -1,0 +1,16 @@
+.spaces-project-work .ac-dialog__desc,
+.spaces-project-work__status {
+  overflow-wrap: anywhere;
+}
+
+.spaces-project-work__status p {
+  margin: 0;
+}
+
+.spaces-project-work__status p + p {
+  margin-top: var(--space-1);
+}
+
+.spaces-project-work__actions {
+  flex-wrap: wrap;
+}

@@ -23,6 +23,9 @@ export interface RheoOverview {
 
 export interface RheoEntry {
   id: string;
+  orgId: string;
+  spaceId: string | null;
+  revision: number;
   kind: "document" | "memory" | "task";
   visibility: "project" | "owner";
   state: "approved" | "proposed" | "archived";
@@ -35,7 +38,13 @@ export interface RheoEntry {
 export interface RheoKnowledge {
   entries: RheoEntry[];
   nextCursor?: string | null;
-  receipts: { runId: string; entryIds: string[]; messageIds: string[]; createdAt: string }[];
+  receipts: {
+    runId: string;
+    entryIds: string[];
+    entryRevisions?: Record<string, number>;
+    messageIds: string[];
+    createdAt: string;
+  }[];
   profile: "protected";
   state: "active" | "archived";
 }
@@ -54,6 +63,8 @@ export interface RheoHandoff extends RheoHandoffConfig {
 
 export const rheoOverviewKey = (userId: string) => ["rheo-spaces", userId] as const;
 export const rheoKnowledgeKey = (userId: string, orgId: string) => ["rheo-knowledge", userId, orgId] as const;
+export const rheoSpaceKnowledgeKey = (userId: string, spaceId: string) =>
+  ["rheo-space-knowledge", userId, spaceId] as const;
 export const rheoHandoffKey = (userId: string, projectId: string) => ["rheo-handoff", userId, projectId] as const;
 
 export type RheoCreate =
@@ -85,6 +96,24 @@ export const rheoSpacesApi = {
     request<RheoKnowledge>(
       `${base}/workspaces/${encodeURIComponent(orgId)}/knowledge${beforeId ? `?before=${encodeURIComponent(beforeId)}` : ""}`,
     ),
+  spaceKnowledge: (spaceId: string, beforeId?: string) =>
+    request<RheoKnowledge>(
+      `${base}/spaces/${encodeURIComponent(spaceId)}/knowledge${beforeId ? `?before=${encodeURIComponent(beforeId)}` : ""}`,
+    ),
+  addSpaceEntry: (spaceId: string, input: Pick<RheoEntry, "kind" | "title" | "body" | "visibility">) =>
+    request<RheoEntry>(`${base}/spaces/${encodeURIComponent(spaceId)}/knowledge`, { json: input }),
+  updateSpaceEntry: (
+    spaceId: string,
+    entryId: string,
+    input: Partial<Pick<RheoEntry, "title" | "body" | "visibility">> & {
+      state?: "approved" | "archived";
+      revision?: number;
+    },
+  ) =>
+    request<RheoEntry>(`${base}/spaces/${encodeURIComponent(spaceId)}/knowledge/${encodeURIComponent(entryId)}`, {
+      method: "PATCH",
+      json: input,
+    }),
   addEntry: (orgId: string, input: Pick<RheoEntry, "kind" | "title" | "body" | "visibility">) =>
     request<RheoEntry>(`${base}/workspaces/${encodeURIComponent(orgId)}/entries`, { json: input }),
   reviewEntry: (orgId: string, entryId: string, state: "approved" | "archived") =>

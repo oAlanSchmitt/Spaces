@@ -379,6 +379,7 @@ async function boot(
     adapters,
     modelProviders,
     subscription: spacesCodex?.subscription,
+    projectWork: spacesCodex?.work.execute,
     onTiming: (name, ms, attrs) => log.info("latency", { metric: name, ms, ...attrs }),
     onRunProfile: (p) => log.debug("run profile", p),
     emailArt,

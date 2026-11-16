@@ -1,16 +1,16 @@
 # Utilizar o Spaces
 
-O piloto local abre em **http://localhost:4410**. A opção **Spaces** no menu reúne os negócios, espaços e projetos. A instalação oficial continua em separado; abrir o desktop original não substitui automaticamente a sua interface pelo fork.
+Com o servidor iniciado, o piloto local abre em **http://localhost:4410**. A opção **Spaces** no menu reúne áreas, espaços e projetos. A instalação oficial continua em separado. Abrir o desktop original não substitui automaticamente a sua interface pelo fork.
 
 ## Organizar o trabalho
 
-Use **Negócio → Espaço → Projeto**:
+Use **Área → Espaço → Projeto**:
 
-- Negócio: uma atividade, como Profissional ou Pessoal.
-- Espaço: um cliente ou área contínua, como Cliente A ou Ideias.
-- Projeto: um objetivo com entrega e contexto próprios, como Site institucional ou Validação de uma ideia.
+- Área: uma grande divisão, como Profissional ou Pessoal.
+- Espaço: um contexto contínuo, como Cliente A ou Ideias, com conhecimento comum para os seus projetos.
+- Projeto: uma entrega, como Site institucional ou Campanha de novembro, com conversa, contexto específico e pasta próprios.
 
-Crie o negócio e o espaço pelos botões do catálogo. Depois crie o projeto com o perfil base. Cada projeto recebe a sua organização, conversa e coordenador; o histórico e o conhecimento de outro projeto não são copiados.
+Crie a área e o espaço pelos botões do catálogo. Depois crie o projeto com o perfil base. Cada projeto recebe a sua organização, conversa e coordenador. As fontes aprovadas do seu Espaço são consultadas sem criar cópias. A conversa e o conhecimento específico de outro projeto permanecem separados.
 
 O perfil inicial é um coordenador. Os especialistas que participaram no desenvolvimento e na auditoria deste fork não são automaticamente nove agentes configurados dentro da aplicação.
 
@@ -18,13 +18,17 @@ O perfil inicial é um coordenador. Os especialistas que participaram no desenvo
 
 Abra o **Coordenador global** pelo catálogo e indique o destino e o objetivo. Por exemplo:
 
-> No negócio Profissional, no espaço Cliente A, cria o projeto Site institucional. O objetivo é preparar o briefing e a proposta de estrutura.
+> Na área Profissional, no espaço Cliente A, cria o projeto Site institucional. O objetivo é desenvolver o site e verificar o resultado.
 
 O coordenador consulta os destinos disponíveis e cria o projeto através da ferramenta interna. Recebe metadados do catálogo; não recebe documentos privados dos projetos. Um pedido repetido na mesma execução não cria outro projeto igual. A resposta fornece o local para abrir o projeto; a conversa de origem conserva o seu contexto.
 
 Use o coordenador global para organizar iniciativas. Desenvolva o conteúdo do trabalho na conversa do projeto correspondente. A criação interna do piloto pertence ao coordenador global; os agentes de projeto mantêm o seu âmbito.
 
-## Dar conhecimento ao projeto
+## Dar conhecimento ao espaço e ao projeto
+
+No cartão do Espaço, abra **Conhecimento compartilhado**. Coloque aqui a identidade visual, regras, decisões e documentos que devem servir todos os seus projetos. Escolha **Todos os projetos do espaço** para disponibilizar o conteúdo aprovado. **Só para mim** conserva o conteúdo privado. Também pode editar ou arquivar as fontes comuns neste painel.
+
+Não é preciso copiar a mesma identidade para cada projeto. Um projeto novo no mesmo Espaço já pode consultar a base comum. Outro Espaço não a herda. O conhecimento existente antes desta evolução continua no projeto original, sem promoção automática.
 
 Abra **Conhecimento** no projeto ou o botão correspondente no catálogo. Adicione um documento ou memória e escolha a visibilidade:
 
@@ -34,21 +38,39 @@ Abra **Conhecimento** no projeto ou o botão correspondente no catálogo. Adicio
 
 As entradas mais recentes aparecem primeiro. **Carregar mais** permite consultar entradas anteriores. O agente pode ler um documento aprovado pelo identificador, mesmo fora da lista inicial. O contexto automático tem limites de tamanho; não envia todo o acervo a cada pedido.
 
-**Fontes usadas** mostra os recibos das execuções recentes. Arquivar uma fonte impede a sua reutilização e a de derivados na montagem de contextos posteriores; uma resposta ainda por publicar é revalidada antes de ser guardada. O histórico já visível às pessoas mantém-se.
+Entradas **Do espaço** mostram a sua revisão e são herdadas. Altere-as no painel do Espaço. Não representam notas privadas do projeto vizinho.
+
+**Fontes usadas** mostra os recibos das execuções recentes, incluindo identificadores e revisões. Editar, privatizar ou arquivar uma fonte invalida os contextos antigos e os seus derivados. Uma resposta ainda por publicar é revalidada antes de ser guardada. O histórico já visível às pessoas mantém-se. Isto não desfaz alterações já escritas em ficheiros.
 
 Os **Itens de ação** são registos no Conhecimento do projeto. Não são os cartões do quadro nativo **Tarefas** e não iniciam trabalho de código ou ações externas.
 
-## Associar uma pasta e continuar no Codex
+## Desenvolver na conversa
 
-No cartão do projeto ou na sua conversa, abra **Continuar no Codex**. Indique a pasta no computador em que pretende trabalhar, o objetivo da próxima tarefa e os critérios de entrega. Guarde e prepare o briefing, reveja a prévia e copie o texto para a conversa correspondente no Codex.
+No projeto ou no catálogo, abra **Trabalhar aqui**. Indique uma pasta existente deste computador e associe-a explicitamente. Esta associação permite executar o trabalho pedido e escrever nessa pasta. Não escolha a pasta do servidor, dados, autenticação ou uma raiz já associada a outro projeto.
 
-O caminho é uma referência: o Spaces não verifica se a pasta existe, não lê os seus ficheiros e não cria pastas ou repositórios. Limpar o campo remove a associação. O vínculo não dá acesso à pasta aos agentes nem inicia o Codex automaticamente.
+O estado do trabalho é separado do cartão geral Codex. **Pendente** ou **Bloqueado** não permitem execução. Quando estiver **Pronto**, volte à conversa do projeto e peça uma entrega concreta, por exemplo:
 
-O briefing inclui o destino, o objetivo, os critérios e conhecimento aprovado para a equipa deste projeto. Conteúdo **Só para mim**, memórias propostas e fontes arquivadas ou revogadas não entram nessa recuperação. A janela contém até 100 entradas recentes e a secção de conhecimento tem orçamento de 12000 caracteres; cortes e omissões são indicados no texto. Não é uma exportação integral do acervo nem do histórico da conversa.
+> Cria uma página inicial na pasta deste projeto, usando a identidade aprovada do espaço. Executa as verificações locais disponíveis e entrega os ficheiros com o resultado dos testes.
+
+> Gera uma imagem de capa para este projeto, usando as cores e o público definidos no espaço. Entrega a imagem nesta conversa.
+
+O Coordenador chama o executor Codex existente nos bastidores. Não é necessário abrir a aplicação Codex nem copiar um briefing. Os resultados e ficheiros entregues aparecem na conversa e no Drive do projeto. Um resumo deve distinguir alterações efetuadas, testes observados e limitações.
+
+Imagens usam a capacidade nativa da assinatura. Disponibilidade e quota são verificadas pela execução, sem inventar um fornecedor alternativo nem usar uma chave paga. Uma falha deve aparecer como falha, sem um cartão que finja uma imagem gerada.
+
+Pode parar o trabalho pela conversa e remover a associação em **Trabalhar aqui**. A revogação interrompe o turno ativo e impede novas entregas por esse vínculo. Ficheiros já alterados permanecem na pasta. Depois de uma interrupção ambígua, confira o estado antes de pedir continuação. O servidor não repete automaticamente o mesmo turno sem um resultado conclusivo.
+
+## Exportar um briefing opcional
+
+Em **Trabalhar aqui → Exportar briefing**, permanece disponível o fluxo auxiliar **Continuar no Codex**. Indique uma referência de pasta, objetivo e critérios, prepare a prévia e copie para outro ambiente quando isso for útil.
+
+O caminho deste briefing é apenas uma referência e não concede acesso. É separado da associação de execução em **Trabalhar aqui**. Limpar a referência no briefing não revoga a associação de trabalho.
+
+O briefing inclui o destino, objetivo, critérios e conhecimento aprovado do Espaço e do projeto, com origem e revisão. Conteúdo **Só para mim**, memórias propostas e fontes arquivadas ou revogadas não entram nessa recuperação. A janela contém até 100 entradas recentes e a secção de conhecimento tem orçamento de 12000 caracteres. Cortes e omissões são indicados no texto. Não é uma exportação integral do acervo nem do histórico da conversa.
 
 O texto é uma fotografia do contexto na preparação. Se fontes ou instruções mudarem, prepare-o novamente. Uma cópia já feita não é atualizada nem revogada à distância. Se a cópia automática falhar, selecione o texto da prévia e copie manualmente.
 
-Trabalhe na pasta pelo Codex e devolva ao projeto o resultado revisto, as verificações e a referência do commit, quando existir. Projetos arquivados não preparam novo trabalho.
+Projetos arquivados ficam disponíveis para consulta e não iniciam novo trabalho.
 
 ## IA e limites do piloto
 
@@ -56,7 +78,7 @@ Em **Codex por assinatura**, ligue a conta pela página oficial. A autenticaçã
 
 Não há fallback para uma chave de API. A compatibilidade está vinculada à versão, ao executável, à configuração e ao ambiente verificados. Alterações relevantes voltam a exigir validação. Claude ainda não tem transporte equivalente validado neste piloto.
 
-O perfil protegido disponibiliza conversa, criação interna de projetos e ferramentas de conhecimento/itens de ação. Execução de programas, browser, conectores, rotinas automáticas e publicação externa continuam desativados. Esta fase não constitui um ambiente completo de desenvolvimento e implantação de software.
+O perfil protegido disponibiliza conversa, criação interna de projetos e ferramentas de conhecimento/itens de ação. O percurso de trabalho acrescenta execução local e imagens somente quando a associação e o perfil estão elegíveis. Browser, conectores arbitrários, instalação de dependências, rotinas automáticas e publicação externa continuam fora deste percurso.
 
 ## Operar e recuperar
 
@@ -66,6 +88,6 @@ Arquivar um projeto conserva os seus dados para consulta. Reabrir permite novos 
 
 ## O que mudou
 
-Agora existe um catálogo hierárquico visível, criação interna de projetos pelo coordenador global, separação de contexto por projeto, conhecimento classificado com revisão de memória e inspeção de fontes. O modelo por assinatura tem verificações próprias e não herda automaticamente ferramentas do computador.
+O catálogo usa Área, Espaço e Projeto. O Espaço fornece conhecimento comum canónico e os projetos conservam o contexto específico. O trabalho pode ser solicitado na própria conversa, com associação explícita da pasta, executor Codex reutilizado e ficheiros entregues no projeto. O modelo por assinatura tem verificações próprias e não herda automaticamente ferramentas irrestritas do computador.
 
-Antes, o fluxo nativo organizava workspaces e canais sem esta camada de negócio/espaço/projeto nem estes contratos específicos de conhecimento e execução. As capacidades gerais do upstream que não foram verificadas para o perfil protegido não fazem parte desta entrega.
+Antes desta evolução, o Espaço era apenas navegação, o conhecimento ficava isolado em cada projeto e a pasta servia para preparar um briefing externo. Os estados e ensaios efetivamente observados estão no registo de execução. Disponibilidade em código, teste sintético e aceitação humana são verificações diferentes.

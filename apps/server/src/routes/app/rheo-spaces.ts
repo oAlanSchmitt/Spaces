@@ -171,5 +171,56 @@ export function rheoSpacesRoutes(deps: AppDeps) {
         200,
       ),
   );
+  const work = deps.spacesCodex?.work;
+  if (work) {
+    const WorkStatus = z.object({
+      folderPath: z.string().nullable(),
+      revision: z.uuid().nullable(),
+      configured: z.boolean(),
+      status: z.enum(["unconfigured", "pending", "ready", "blocked"]),
+      message: z.string().optional(),
+    });
+    const params = z.object({ projectId: z.uuid() });
+    app.openapi(
+      createRoute({
+        method: "get",
+        path: "/spaces/projects/{projectId}/work",
+        tags,
+        security,
+        summary: "Read the project's local work binding and readiness",
+        request: { params },
+        responses: { 200: json(WorkStatus), ...errors },
+      }),
+      async (c) => c.json(await work.status(c.get("user").id, c.req.valid("param").projectId), 200),
+    );
+    app.openapi(
+      createRoute({
+        method: "put",
+        path: "/spaces/projects/{projectId}/work",
+        tags,
+        security,
+        summary: "Associate an existing local folder with this project",
+        request: {
+          params,
+          body: body(z.object({ folderPath: z.string().min(1).max(2000), revision: z.uuid().nullable() }).strict()),
+        },
+        responses: { 200: json(WorkStatus), ...errors },
+      }),
+      async (c) => c.json(await work.bind(c.get("user").id, c.req.valid("param").projectId, c.req.valid("json")), 200),
+    );
+    app.openapi(
+      createRoute({
+        method: "delete",
+        path: "/spaces/projects/{projectId}/work",
+        tags,
+        security,
+        summary: "Revoke the project's folder binding and cancel active work",
+        request: { params, body: body(z.object({ revision: z.uuid() }).strict()) },
+        responses: { 200: json(WorkStatus), ...errors },
+      }),
+      async (c) =>
+        c.json(await work.unbind(c.get("user").id, c.req.valid("param").projectId, c.req.valid("json").revision), 200),
+    );
+  }
   return app;
 }

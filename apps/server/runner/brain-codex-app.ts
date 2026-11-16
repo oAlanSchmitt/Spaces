@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import type { EventEmitter } from "node:events";
-import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, lstatSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
@@ -26,7 +26,7 @@ import {
 } from "./brain-codex";
 import { CODEX_WINDOWS_CONFIG, codexLaunch } from "./codex-windows";
 import { killTree } from "./exec";
-import { envValue } from "./executors";
+import { type CliRun, envValue } from "./executors";
 import {
   CODEX_MCP_ENV,
   codexWritableRoots,
@@ -210,6 +210,48 @@ export const codexThreadPolicy = (profile: CommandProfile, windows = false) => (
   sandbox: codexSandbox(profile),
   approvalPolicy: windows ? ("never" as const) : ("untrusted" as const),
 });
+
+/** The closed host selects the observed local environment; an empty array disables execution. */
+export function codexIsolatedPolicy(permissions: string, cwd: string) {
+  const environments = [{ environmentId: "local", cwd, runtimeWorkspaceRoots: [cwd] }];
+  return {
+    thread: {
+      cwd,
+      permissions,
+      approvalPolicy: "never",
+      runtimeWorkspaceRoots: [cwd],
+      environments,
+      selectedCapabilityRoots: [],
+      allowProviderModelFallback: false,
+    },
+    resume: { cwd, permissions, approvalPolicy: "never", runtimeWorkspaceRoots: [cwd] },
+    turn: { cwd, permissions, runtimeWorkspaceRoots: [cwd], environments },
+  };
+}
+
+export function codexIsolatedThreadMatches(settings: unknown, permissions: string, cwd: string): boolean {
+  if (!isObj(settings) || !isObj(settings.activePermissionProfile) || !isObj(settings.sandbox)) return false;
+  const key = (value: string) => (process.platform === "win32" ? value.toLowerCase() : value);
+  const exactPath = (value: unknown) => typeof value === "string" && key(value) === key(cwd);
+  const exactRoots = (value: unknown) => Array.isArray(value) && value.length === 1 && exactPath(value[0]);
+  const environments = isObj(settings.thread) ? settings.thread.environments : undefined;
+  const environment = Array.isArray(environments) && environments.length === 1 ? environments[0] : undefined;
+  return (
+    settings.activePermissionProfile.id === permissions &&
+    (settings.activePermissionProfile.extends === undefined || settings.activePermissionProfile.extends === null) &&
+    exactPath(settings.cwd) &&
+    exactRoots(settings.runtimeWorkspaceRoots) &&
+    settings.approvalPolicy === "never" &&
+    settings.modelProvider === "openai" &&
+    settings.sandbox.networkAccess === false &&
+    Array.isArray(settings.instructionSources) &&
+    settings.instructionSources.length === 0 &&
+    isObj(environment) &&
+    environment.environmentId === "local" &&
+    exactPath(environment.cwd) &&
+    exactRoots(environment.runtimeWorkspaceRoots)
+  );
+}
 
 // ── JSON-RPC client ──────────────────────────────────────────────────────────
 
@@ -416,10 +458,11 @@ const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
  * never sees: a copy goes to the agent's folder and a `file` event tells the server to show it with the reply.
  * Returns the copy's path relative to `folder`, or null when there is no image to keep.
  */
-function keepCodexImage(item: Record<string, unknown>, id: string, folder: string): string | null {
+function keepCodexImage(item: Record<string, unknown>, id: string, folder: string, confined = false): string | null {
   try {
     const saved = str(item.savedPath);
-    const fromFile = saved !== "" && existsSync(saved);
+    // The confined host accepts inline bytes only: savedPath must never turn into a privileged file read.
+    const fromFile = !confined && saved !== "" && existsSync(saved);
     // No file it could reach (another user's folder, an older Codex): the item carries the image itself.
     const bytes = fromFile ? null : Buffer.from(str(item.result), "base64");
     if (bytes && bytes.byteLength === 0) return null;
@@ -427,8 +470,15 @@ function keepCodexImage(item: Record<string, unknown>, id: string, folder: strin
     const stamp = new Date().toISOString().replace(/\D/g, "").slice(0, 14);
     const name = `image-${stamp}-${id.replace(/[^a-zA-Z0-9]/g, "").slice(-6) || "codex"}${ext}`;
     const dir = path.join(folder, CODEX_IMAGES_FOLDER);
+    if (
+      confined &&
+      existsSync(dir) &&
+      (lstatSync(dir).isSymbolicLink() || realpathSync(dir).toLowerCase() !== dir.toLowerCase())
+    )
+      return null;
     mkdirSync(dir, { recursive: true });
-    if (bytes) writeFileSync(path.join(dir, name), bytes);
+    if (confined && !isInside(realpathSync(folder), realpathSync(dir))) return null;
+    if (bytes) writeFileSync(path.join(dir, name), bytes, confined ? { flag: "wx" } : undefined);
     else copyFileSync(saved, path.join(dir, name));
     return `${CODEX_IMAGES_FOLDER}/${name}`;
   } catch {
@@ -442,6 +492,7 @@ export function codexImageEvents(
   id: string,
   folder: string | undefined,
   clean: (text: string) => string,
+  confined = false,
 ): CodexBrainEvent[] {
   const prompt = clean(str(item.revisedPrompt)).slice(0, 500);
   const call = (content: string, isError = false): CodexBrainEvent => ({
@@ -457,8 +508,16 @@ export function codexImageEvents(
     const until = resets && !Number.isNaN(resets.getTime()) ? ` until ${resets.toISOString()}` : "";
     return [call(`The plan's image limit was reached${until}.`, true)];
   }
-  const kept = folder ? keepCodexImage(item, id, folder) : null;
-  if (!kept) return [call("Codex made no image.", true)];
+  const kept = folder ? keepCodexImage(item, id, folder, confined) : null;
+  if (!kept)
+    return [
+      call(
+        confined
+          ? "Codex returned no image bytes that can be safely delivered in this project."
+          : "Codex made no image.",
+        true,
+      ),
+    ];
   return [call(`Saved ${kept} in your folder.`), { type: "file", path: kept }];
 }
 
@@ -497,6 +556,7 @@ export class CodexAppMapper {
       folder?: string;
       model?: string;
       redact?: (text: string) => string;
+      confined?: boolean;
     },
   ) {}
 
@@ -571,7 +631,7 @@ export class CodexAppMapper {
         return { events: [codexFileChangeCall({ id, changes, failed: status === "failed" || status === "declined" })] };
       }
       case "imageGeneration":
-        return { events: codexImageEvents(item, id, this.opts.folder, (t) => this.clean(t)) };
+        return { events: codexImageEvents(item, id, this.opts.folder, (t) => this.clean(t), this.opts.confined) };
       default:
         // Our bridge's calls (`mcpToolCall`) aren't repeated (the engine ran them); the rest isn't a tool call.
         return { events: [] };
@@ -593,6 +653,20 @@ export class CodexAppMapper {
     const a = this.answer;
     this.answer = undefined;
     return a;
+  }
+
+  observedUsage(): Extract<CodexBrainEvent, { type: "usage" }> | undefined {
+    if (!this.base || !this.total) return undefined;
+    const u = usageDiff(this.total, this.base);
+    return {
+      type: "usage",
+      input: u.inputTokens,
+      output: u.outputTokens,
+      source: "plan",
+      ...(this.opts.model ? { model: this.opts.model } : {}),
+      ...(u.cachedInputTokens > 0 ? { cacheRead: u.cachedInputTokens } : {}),
+      ...(u.cacheWriteInputTokens > 0 ? { cacheWrite: u.cacheWriteInputTokens } : {}),
+    };
   }
 
   /** `turn/completed`: `usage` + `done` (held answers first), or how it failed. */
@@ -759,6 +833,11 @@ export interface CodexAppServersOptions {
   /** How `codex app-server` starts (a worker under systemd: in the agent's AI CLIs slice, `scope-gate.ts`). */
   spawn?: Spawn;
   log?: (line: string) => void;
+  /** A host with named permissions supplies its own closed launch; no legacy sandbox or MCP config is added. */
+  isolated?: {
+    permissions: string;
+    createClient(input: CodexTurnInput): Promise<CodexAppClient>;
+  };
 }
 
 const canceledEvent: CodexBrainEvent = { type: "error", code: "canceled", message: "The turn was canceled." };
@@ -962,18 +1041,20 @@ export class CodexAppServers implements CodexAppRunner {
       platform,
       pathList: envValue(env, "PATH", platform) ?? "",
     });
-    if ("error" in launch) {
+    if ("error" in launch && !this.opts.isolated) {
       this.log(`codex app-server didn't start: ${launch.error}`);
       return null;
     }
     let client: CodexAppClient;
     try {
-      client = new CodexAppClient(launch.file, launch.args, {
-        cwd: input.cwd,
-        env: launch.env ? { ...env, ...launch.env } : env,
-        ...(this.opts.spawn ? { spawn: this.opts.spawn } : {}),
-        ...(launch.windowsVerbatimArguments ? { windowsVerbatimArguments: true } : {}),
-      });
+      client = this.opts.isolated
+        ? await this.opts.isolated.createClient(input)
+        : new CodexAppClient((launch as CliRun).file, (launch as CliRun).args, {
+            cwd: input.cwd,
+            env: !("error" in launch) && launch.env ? { ...env, ...launch.env } : env,
+            ...(this.opts.spawn ? { spawn: this.opts.spawn } : {}),
+            ...(!("error" in launch) && launch.windowsVerbatimArguments ? { windowsVerbatimArguments: true } : {}),
+          });
     } catch (err) {
       this.log(`codex app-server didn't start: ${err instanceof Error ? err.message : String(err)}`);
       return null;
@@ -984,7 +1065,7 @@ export class CodexAppServers implements CodexAppRunner {
         {
           clientInfo: { name: "agentes_runner", title: "agentes.chat runner", version: "1" },
           capabilities: {
-            experimentalApi: false,
+            experimentalApi: !!this.opts.isolated,
             requestAttestation: false,
             // Never read here (each is one line per chunk of output).
             optOutNotificationMethods: [
@@ -1090,7 +1171,9 @@ export class CodexAppServers implements CodexAppRunner {
     const client = live.client;
     const common = {
       cwd: input.cwd,
-      ...codexThreadPolicy(input.profile ?? "work", (opts.platform ?? process.platform) === "win32"),
+      ...(this.opts.isolated
+        ? codexIsolatedPolicy(this.opts.isolated.permissions, input.cwd).thread
+        : codexThreadPolicy(input.profile ?? "work", (opts.platform ?? process.platform) === "win32")),
       ...(input.model ? { model: input.model } : {}),
     };
     const stored = opts.threads.get(live.threadKey);
@@ -1098,9 +1181,19 @@ export class CodexAppServers implements CodexAppRunner {
       try {
         const r = await client.request<ThreadResponse>("thread/resume", {
           threadId: stored,
-          ...common,
+          ...(this.opts.isolated
+            ? {
+                ...codexIsolatedPolicy(this.opts.isolated.permissions, input.cwd).resume,
+                ...(input.model ? { model: input.model } : {}),
+              }
+            : common),
           excludeTurns: true,
         });
+        const refusal = await this.isolatedThreadRefusal(client, r, input);
+        if (refusal) {
+          opts.emit({ type: "error", code: "work_environment", message: refusal });
+          return {};
+        }
         live.threadId = str(r?.thread?.id) || stored;
         return true;
       } catch (err) {
@@ -1117,6 +1210,11 @@ export class CodexAppServers implements CodexAppRunner {
         ...common,
         ...(instructions ? { developerInstructions: instructions } : {}),
       });
+      const refusal = await this.isolatedThreadRefusal(client, r, input);
+      if (refusal) {
+        opts.emit({ type: "error", code: "work_environment", message: refusal });
+        return {};
+      }
       const id = str(r?.thread?.id);
       if (!id) throw new CodexRpcError(0, "Codex started a thread without an id");
       live.threadId = id;
@@ -1130,6 +1228,24 @@ export class CodexAppServers implements CodexAppRunner {
     }
   }
 
+  private async isolatedThreadRefusal(
+    client: CodexAppClient,
+    settings: unknown,
+    input: CodexTurnInput,
+  ): Promise<string | null> {
+    if (!this.opts.isolated) return null;
+    if (!codexIsolatedThreadMatches(settings, this.opts.isolated.permissions, input.cwd))
+      return "Codex did not confirm the isolated local project environment and permissions. No model turn was started.";
+    try {
+      const status = await client.request<unknown>("environment/status", { environmentId: "local" });
+      if (!isObj(status) || status.status !== "ready")
+        return "The isolated local project environment is not ready. No model turn was started.";
+    } catch {
+      return "Codex could not confirm the isolated local environment status. No model turn was started.";
+    }
+    return null;
+  }
+
   /** One `brain.turn` on the thread: `turn/start`, its events, steering; ends with one `done` or `error`. */
   private runOnThread(live: AppLive, input: CodexTurnInput, opts: CodexTurnOptions): Promise<AppOutcome> {
     const client = live.client;
@@ -1138,11 +1254,13 @@ export class CodexAppServers implements CodexAppRunner {
     const deltaMs = this.opts.deltaMs ?? CODEX_APP_DELTA_MS;
     const mapper = new CodexAppMapper({
       cwd: input.cwd,
+      ...(this.opts.isolated ? { confined: true } : {}),
       ...(input.folder ? { folder: input.folder } : {}),
       ...(input.model ? { model: input.model } : {}),
       ...(opts.redact ? { redact: opts.redact } : {}),
     });
     const overrides = {
+      ...(this.opts.isolated ? codexIsolatedPolicy(this.opts.isolated.permissions, input.cwd).turn : {}),
       ...(input.model ? { model: input.model } : {}),
       ...(isBrainEffort(input.effort) ? { effort: codexEffort(input.effort) } : {}),
       serviceTier: input.speed === "fast" ? "fast" : null,
@@ -1194,6 +1312,11 @@ export class CodexAppServers implements CodexAppRunner {
         if (settled) return;
         flush();
         settled = true;
+        if (this.opts.isolated) {
+          const measured = mapper.observedUsage();
+          events = events.filter((event) => event.type !== "usage");
+          if (measured) events.unshift(measured);
+        }
         for (const e of events) opts.emit(e);
         live.turn = null;
         client.onRequest(null);

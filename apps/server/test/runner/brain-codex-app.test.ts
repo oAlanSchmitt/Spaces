@@ -1,5 +1,5 @@
-import { afterEach, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { afterEach, expect, setSystemTime, test } from "bun:test";
+import { chmodSync, existsSync, linkSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { type MachineRequest, parseBrainEvent } from "@agenteschat/adapters/machine-protocol";
 import { sealSecret, secretAad } from "@agenteschat/adapters/secret-box";
@@ -13,6 +13,7 @@ import {
 } from "../../runner/brain-codex";
 import {
   approvalCalls,
+  CodexAppClient,
   CodexAppMapper,
   CodexAppServers,
   type CodexAppServersOptions,
@@ -132,6 +133,158 @@ function start(ctx: Parameters<typeof handleCodexBrainTurn>[0], req: Parameters<
 
 const deltas = (events: CodexBrainEvent[]) => events.map((e) => (e.type === "text_delta" ? e.text : "")).join("");
 const notDeltas = (events: CodexBrainEvent[]) => events.filter((e) => e.type !== "text_delta");
+
+test("an isolated host uses its named profile and closed client without adding the legacy sandbox or MCP", async () => {
+  const root = tempDir("isolated-codex-app-");
+  dirs.push(root);
+  const log = path.join(root, "log.jsonl");
+  const clients: CodexAppClient[] = [];
+  let invalidLocal = false;
+  const app = new CodexAppServers({
+    runs: new Map(),
+    isolated: {
+      permissions: "spaces-work",
+      async createClient() {
+        const client = new CodexAppClient(process.execPath, [FAKE, "app-server"], {
+          cwd: root,
+          env: {
+            ...process.env,
+            BUN_BE_BUN: "1",
+            FAKE_CODEX_LOG: log,
+            ...(invalidLocal ? { FAKE_CODEX_INVALID_LOCAL: "1" } : {}),
+          },
+        });
+        clients.push(client);
+        return client;
+      },
+    },
+  });
+  servers.push(app);
+  const events: CodexBrainEvent[] = [];
+  await app.turn(
+    {
+      runId: run(89),
+      sessionId: SESSION,
+      agentId: AGENT.id,
+      cwd: root,
+      system: "Isolated",
+      prompt: "Hello",
+      version: "0.167.0-alpha.4.1",
+      mcp: { token: "", tools: "" },
+      profile: "work",
+      keepAlive: false,
+    },
+    {
+      threads: new CodexThreads(path.join(root, "threads.json")),
+      workDir: root,
+      signal: new AbortController().signal,
+      emit: (event) => events.push(event),
+    },
+    async () => {
+      throw new Error("An isolated turn must not run a fallback");
+    },
+  );
+  const lines = readFileSync(log, "utf8")
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+  expect(lines.find((line) => line.rpc === "initialize").params.capabilities.experimentalApi).toBe(true);
+  const thread = lines.find((line) => line.rpc === "thread/start").params;
+  expect(thread).toMatchObject({
+    permissions: "spaces-work",
+    approvalPolicy: "never",
+    runtimeWorkspaceRoots: [root],
+    environments: [{ environmentId: "local", cwd: root, runtimeWorkspaceRoots: [root] }],
+    selectedCapabilityRoots: [],
+    allowProviderModelFallback: false,
+  });
+  expect(thread).not.toHaveProperty("sandbox");
+  expect(lines.find((line) => line.rpc === "environment/status").params).toEqual({ environmentId: "local" });
+  expect(lines.find((line) => line.rpc === "turn/start").params).toMatchObject({
+    permissions: "spaces-work",
+    environments: [{ environmentId: "local", cwd: root, runtimeWorkspaceRoots: [root] }],
+  });
+  expect(events.at(-1)?.type).toBe("done");
+  await waitFor(() => clients.every((client) => client.exited), 5000);
+  invalidLocal = true;
+  const refused: CodexBrainEvent[] = [];
+  await app.turn(
+    {
+      runId: run(90),
+      sessionId: U2,
+      agentId: AGENT.id,
+      cwd: root,
+      system: "Isolated",
+      prompt: "Must not start",
+      version: "0.167.0-alpha.4.1",
+      mcp: { token: "", tools: "" },
+      profile: "work",
+      keepAlive: false,
+    },
+    {
+      threads: new CodexThreads(path.join(root, "refused-threads.json")),
+      workDir: root,
+      signal: new AbortController().signal,
+      emit: (event) => refused.push(event),
+    },
+    async () => {
+      throw new Error("A refused environment must not use a fallback");
+    },
+  );
+  expect(refused.at(-1)).toMatchObject({ type: "error", code: "work_environment" });
+  const after = readFileSync(log, "utf8")
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+  expect(after.filter((line) => line.rpc === "turn/start")).toHaveLength(1);
+  await waitFor(() => clients.every((client) => client.exited), 5000);
+});
+
+test("confined image mapping rejects privileged saved paths and preserves observed partial usage", () => {
+  const root = tempDir("isolated-image-");
+  dirs.push(root);
+  const mapper = new CodexAppMapper({ cwd: root, folder: root, confined: true });
+  const result = mapper.completed({ type: "imageGeneration", id: "image", savedPath: path.join(root, "private.png") });
+  expect(result.events).toMatchObject([{ type: "tool_call", executed: { isError: true } }]);
+  expect(result.events.some((event) => event.type === "file")).toBe(false);
+  mapper.usage({
+    total: { inputTokens: 20, outputTokens: 5, cachedInputTokens: 0, cacheWriteInputTokens: 0 },
+    last: { inputTokens: 20, outputTokens: 5, cachedInputTokens: 0, cacheWriteInputTokens: 0 },
+  });
+  expect(mapper.observedUsage()).toMatchObject({ type: "usage", input: 20, output: 5, source: "plan" });
+});
+
+test("confined image delivery cannot clobber an existing target or a file linked outside the project", () => {
+  const root = tempDir("confined-image-collision-");
+  dirs.push(root);
+  const project = path.join(root, "project");
+  const images = path.join(project, "generated-images");
+  mkdirSync(images, { recursive: true });
+  const outside = path.join(root, "other-project.png");
+  writeFileSync(outside, "outside-original");
+  const linkedTarget = path.join(images, "image-20300102030405-link01.png");
+  linkSync(outside, linkedTarget);
+  const existingTarget = path.join(images, "image-20300102030405-exist1.png");
+  writeFileSync(existingTarget, "existing-original");
+  const mapper = new CodexAppMapper({ cwd: project, folder: project, confined: true });
+  setSystemTime(new Date("2030-01-02T03:04:05.000Z"));
+  try {
+    for (const id of ["link01", "exist1"]) {
+      const result = mapper.completed({
+        id,
+        type: "imageGeneration",
+        result: Buffer.from("new-image-bytes").toString("base64"),
+      });
+      expect(readFileSync(outside, "utf8")).toBe("outside-original");
+      expect(readFileSync(linkedTarget, "utf8")).toBe("outside-original");
+      expect(readFileSync(existingTarget, "utf8")).toBe("existing-original");
+      expect(result.events.some((event) => event.type === "file")).toBe(false);
+      expect(result.events).toMatchObject([{ type: "tool_call", executed: { isError: true } }]);
+    }
+  } finally {
+    setSystemTime();
+  }
+});
 
 test("version gate and the app-server command line: our overrides, our bridge per process, no network", () => {
   expect(codexAtLeast("codex-cli 0.163.0")).toBe(true);
@@ -646,8 +799,8 @@ test("profiles: plan is a read-only sandbox, work a workspace one; neither has t
   expect(
     approvalCalls("item/fileChange/requestApproval", { grantRoot: "/etc" }, { changes: [{ path: "src/a.ts" }] }, "/w"),
   ).toEqual([
-    { tool_name: "Write", input: { file_path: "/w/src/a.ts" } },
-    { tool_name: "Write", input: { file_path: "/etc" } },
+    { tool_name: "Write", input: { file_path: path.resolve("/w/src/a.ts") } },
+    { tool_name: "Write", input: { file_path: path.resolve("/etc") } },
   ]);
   // Nothing to judge it by: declined.
   expect(approvalCalls("item/fileChange/requestApproval", {}, undefined, "/w")).toEqual([]);

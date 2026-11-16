@@ -260,6 +260,7 @@ export * from "./questions";
 export * from "./recovery";
 export * from "./reply-policy";
 export * from "./reporting";
+export * from "./rheo-entry-payload";
 export * from "./rheo-handoff";
 export * from "./rheo-knowledge";
 export * from "./rheo-policy";

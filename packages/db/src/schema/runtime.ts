@@ -190,6 +190,7 @@ export const agentRuns = pgTable(
   },
   (t) => [
     foreignKey({ columns: [t.orgId, t.agentId], foreignColumns: [agents.orgId, agents.id] }).onDelete("cascade"),
+    unique().on(t.orgId, t.id),
     index("agent_runs_work_idx").on(t.workId).where(sql`${t.workId} is not null`),
     // One run per (trigger, agent): redelivered outbox events can't double-answer.
     unique().on(t.triggerMessageId, t.agentId),

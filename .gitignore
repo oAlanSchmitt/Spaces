@@ -28,3 +28,4 @@ i18n-work/
 
 # Local fork runtime and data
 .rheo/
+.spaces-work-tests/

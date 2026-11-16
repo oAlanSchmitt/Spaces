@@ -1,12 +1,62 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { eq, schema } from "@agenteschat/db";
-import { buildRunContext, insertMessage, postPersonMessage } from "../src";
+import {
+  bootstrapRheoSpaces,
+  buildRunContext,
+  createRheoEntry,
+  createRheoProject,
+  createRheoSpaceEntry,
+  insertMessage,
+  postPersonMessage,
+} from "../src";
 import { assertRheoSourcesCurrent } from "../src/rheo-knowledge";
 import { type Fixture, setup } from "./fixtures";
 
 let f: Fixture;
 beforeEach(async () => {
   f = await setup();
+});
+
+test("new project contexts include reviewed common sources with their origin and revision while project-only content stays local", async () => {
+  const tree = await bootstrapRheoSpaces(f.db, f.owner.id);
+  const space = tree.businesses.flatMap((business) => business.spaces).find((candidate) => candidate.projects.length);
+  const a = space?.projects[0];
+  if (!space || !a) throw new Error("Missing synthetic project");
+  const b = await createRheoProject(f.db, f.owner.id, {
+    spaceId: space.id,
+    name: "Context B",
+    requestKey: "context-b",
+  });
+  const common = await createRheoSpaceEntry(f.db, f.owner.id, space.id, {
+    kind: "document",
+    title: "Common source",
+    body: "COMMON_CONTEXT",
+  });
+  await createRheoEntry(f.db, f.owner.id, a.orgId, {
+    kind: "document",
+    title: "Private source",
+    body: "ONLY_CONTEXT_A",
+  });
+  for (const project of [a, b]) {
+    const [agent] = await f.db.select().from(schema.agents).where(eq(schema.agents.orgId, project.orgId));
+    if (!agent) throw new Error("Missing project agent");
+    const trigger = await postPersonMessage(f, f.owner.id, project.orgId, project.channelId, {
+      body: `@${agent.handle} Read our sources`,
+    });
+    const [run] = await f.db.select().from(schema.agentRuns).where(eq(schema.agentRuns.triggerMessageId, trigger.id));
+    if (!run) throw new Error("Missing project run");
+    const context = await buildRunContext(f.db, run, agent, { maxMessages: 20 });
+    const rendered = JSON.stringify(context);
+    expect(rendered).toContain("COMMON_CONTEXT");
+    expect(rendered).toContain(space.id);
+    expect(rendered.includes("ONLY_CONTEXT_A")).toBe(project.id === a.id);
+    const [receipt] = await f.db
+      .select()
+      .from(schema.rheoContextReceipts)
+      .where(eq(schema.rheoContextReceipts.runId, run.id));
+    expect(receipt?.entryIds).toContain(common.id);
+    expect(receipt?.entryRevisions[common.id]).toBe(1);
+  }
 });
 afterEach(async () => {
   await f?.close();

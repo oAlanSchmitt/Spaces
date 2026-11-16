@@ -55,7 +55,7 @@ test("local first access prepares a protected Spaces workspace without the nativ
   await settle(10);
   expect(router.state.location.pathname).toBe(`/org/${ORG_ID}/spaces`);
   expect(document.getElementById("app-nav")).toBeTruthy();
-  expect(screen().getByRole("button", { name: "Criar negócio" })).toBeTruthy();
+  expect(screen().getByRole("button", { name: "Criar área" })).toBeTruthy();
   expect(writes).toEqual(["/api/app/spaces/bootstrap"]);
   expect(state.calls.filter((call) => call.method === "orgs.create")).toHaveLength(0);
 });
@@ -78,7 +78,7 @@ test("the native new-workspace destination returns an existing Spaces account to
   const { router } = await renderApp("/onboarding?resume=legacy-workspace", { api: createFakeApi(state) });
   await settle(8);
   expect(router.state.location.pathname).toBe(`/org/${ORG_ID}/spaces`);
-  expect(screen().getByRole("button", { name: "Criar negócio" })).toBeTruthy();
+  expect(screen().getByRole("button", { name: "Criar área" })).toBeTruthy();
   expect(writes).toBe(0);
   expect(state.calls.filter((call) => call.method === "orgs.create")).toHaveLength(0);
 });

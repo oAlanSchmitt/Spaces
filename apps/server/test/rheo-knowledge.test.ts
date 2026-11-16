@@ -70,3 +70,78 @@ test("project knowledge uses owner authorization and same-origin review", async 
   expect(cursor).toBeNull();
   expect((await owner(`${base}/knowledge?before=${crypto.randomUUID()}`)).status).toBe(404);
 });
+
+test("space knowledge is explicit, owner-scoped and cannot be reviewed through another space or project", async () => {
+  t = await createTestServer({ env: { ALLOW_SIGNUP: "true" } });
+  const owner = browser(t);
+  await signUp(owner, "space-owner@example.com");
+  const tree = (await (await owner("/api/app/spaces/bootstrap", { json: {} })).json()) as RheoOverview;
+  const spaces = tree.businesses.flatMap((business) => business.spaces);
+  const space = spaces.find((candidate) => candidate.projects.length);
+  const otherSpace = spaces.find((candidate) => candidate.id !== space?.id);
+  const project = space?.projects[0];
+  if (!space || !otherSpace || !project) throw new Error("Missing synthetic scopes");
+  const base = `/api/app/spaces/spaces/${space.id}/knowledge`;
+  const made = await owner(base, {
+    json: { kind: "document", title: "Common source", body: "COMMON_SOURCE", visibility: "project" },
+  });
+  expect(made.status).toBe(201);
+  const entry = (await made.json()) as { id: string };
+  expect(await (await owner(base)).json()).toMatchObject({
+    profile: "protected",
+    entries: [{ id: entry.id, spaceId: space.id, revision: 1 }],
+    receipts: [],
+  });
+  expect(await (await owner(`/api/app/spaces/spaces/${otherSpace.id}/knowledge`)).json()).toMatchObject({
+    entries: [],
+  });
+  expect(await (await owner(`/api/app/spaces/workspaces/${project.orgId}/knowledge`)).json()).toMatchObject({
+    entries: [{ id: entry.id, spaceId: space.id }],
+  });
+  const other = browser(t);
+  await signUp(other, "other-space-owner@example.com");
+  expect((await other(base)).status).toBe(403);
+  expect((await other(base, { json: { kind: "memory", title: "Attack", body: "Denied" } })).status).toBe(403);
+  expect(
+    (
+      await owner(`${base}/${entry.id}`, {
+        method: "PATCH",
+        json: { state: "archived" },
+        origin: "https://elsewhere.example",
+      })
+    ).status,
+  ).toBe(403);
+  expect(
+    (
+      await owner(`/api/app/spaces/spaces/${otherSpace.id}/knowledge/${entry.id}`, {
+        method: "PATCH",
+        json: { state: "archived" },
+      })
+    ).status,
+  ).toBe(404);
+  expect(
+    (
+      await owner(`/api/app/spaces/workspaces/${tree.controlOrgId}/entries/${entry.id}`, {
+        method: "PATCH",
+        json: { state: "archived" },
+      })
+    ).status,
+  ).toBe(404);
+  const archived = await owner(`${base}/${entry.id}`, { method: "PATCH", json: { state: "archived" } });
+  expect(archived.status).toBe(200);
+  expect(await archived.json()).toMatchObject({ state: "archived", revision: 2 });
+  expect((await owner(`${base}/${entry.id}`, { method: "PATCH", json: { body: "STALE", revision: 1 } })).status).toBe(
+    409,
+  );
+  const updated = await owner(`${base}/${entry.id}`, {
+    method: "PATCH",
+    json: { title: "Updated common", body: "VERSION_TWO", state: "approved", revision: 2 },
+  });
+  expect(updated.status).toBe(200);
+  expect(await updated.json()).toMatchObject({
+    title: "Updated common",
+    body: "VERSION_TWO",
+    state: "approved",
+    revision: 3,
+  });
+});

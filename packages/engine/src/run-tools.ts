@@ -235,6 +235,7 @@ export function absorbToolData(t: ToolSideEffects, data: Record<string, unknown>
   if (!data) return null;
   const artifact = data.artifact as ArtifactLink | undefined;
   if (artifact) t.artifacts = withArtifacts(t.artifacts, [artifact]);
+  if (Array.isArray(data.artifacts)) t.artifacts = withArtifacts(t.artifacts, data.artifacts as ArtifactLink[]);
   const link = data.missionLink as { missionId: string; threadId: string } | undefined;
   if (link?.missionId && link.threadId) t.missionLink = link;
   if (data.reacted) t.reacted = true;

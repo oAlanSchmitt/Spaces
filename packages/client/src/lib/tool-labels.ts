@@ -6,6 +6,14 @@ import type { TFunction } from "i18next";
  * pt-BR. Other languages build a name from the verb and nouns (`toolName` in `tool-review.ts`).
  */
 const LABELS: Record<string, readonly [en: string, ptBR: string]> = {
+  rheo_work: ["Work on this project", "Trabalhar no projeto"],
+  rheo_list: ["See areas and spaces", "Ver áreas e espaços"],
+  rheo_create_project: ["Create a project", "Criar um projeto"],
+  rheo_inspect: ["Check project sources", "Verificar fontes do projeto"],
+  rheo_context: ["Read project and space knowledge", "Ler conhecimento do espaço e do projeto"],
+  rheo_documents: ["Read approved documents", "Ler documentos aprovados"],
+  rheo_memory: ["Review project memory", "Rever memória do projeto"],
+  rheo_tasks: ["Manage project action items", "Gerir itens de ação do projeto"],
   // GitHub and GitLab: repositories, code, branches
   git_clone: ["Clone repository", "Clonar repositório"],
   create_repository: ["Create repository", "Criar repositório"],

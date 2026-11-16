@@ -110,6 +110,7 @@ import {
   prepareAgentCode,
   queueBudgetEmail,
   type ResolveHost,
+  type RheoWorkInput,
   RIGHT_HAND_TURN,
   ROUTER_QUIET_MS,
   type RunExecutorDeps,
@@ -128,6 +129,8 @@ import {
   smallModelFor,
   standingJudge,
   streamClosed,
+  type ToolContext,
+  type ToolOutput,
   type ToolSource,
   type VaultDeps,
   type VoiceDeps,
@@ -149,6 +152,7 @@ export interface EngineOptions {
   adapters: Adapters;
   modelProviders: Record<string, ModelProvider>;
   subscription?: SubscriptionModel;
+  projectWork?: (input: RheoWorkInput, ctx: ToolContext, artifacts: ArtifactDeps) => Promise<ToolOutput>;
   /** Tests: extra tool sources, in-process MCP, fake HTTP, fake embeddings. */
   toolSources?: ToolSource[];
   mcpConnect?: McpConnect;
@@ -399,9 +403,12 @@ export function buildEngine(o: EngineOptions) {
   });
   // The workspace's cap of live background works (ADR 0121 §7).
   setWorkOrgCap(config.AGENT_WORK_MAX_PER_ORG);
+  const projectWork = o.projectWork;
   const tools = createToolGateway({
     sources: [
-      createRheoToolSource(),
+      createRheoToolSource({
+        ...(projectWork ? { work: (input, ctx) => projectWork(input, ctx, artifacts) } : {}),
+      }),
       // A question for what the agent could find, or a secret asked in the chat, is held first (ADR 0109).
       createAskUserToolSource({ judge: context.judge, tools: () => tools }),
       // Missing something a request needs: ask for it (an approval card) instead of failing.

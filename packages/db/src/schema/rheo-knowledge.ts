@@ -1,7 +1,8 @@
-import { foreignKey, index, jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { foreignKey, index, integer, jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { agents } from "./agents";
 import { users } from "./auth";
 import { channels } from "./chat";
+import { rheoSpaces } from "./rheo-spaces";
 import { agentRuns } from "./runtime";
 import { organizations } from "./tenancy";
 
@@ -13,6 +14,8 @@ export const rheoEntries = pgTable(
     orgId: uuid()
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
+    spaceId: uuid(),
+    revision: integer().notNull().default(1),
     kind: text().$type<"document" | "memory" | "task">().notNull(),
     visibility: text().$type<"project" | "owner">().notNull().default("project"),
     state: text().$type<"proposed" | "approved" | "archived">().notNull().default("proposed"),
@@ -27,6 +30,10 @@ export const rheoEntries = pgTable(
   (t) => [
     unique().on(t.orgId, t.id),
     index("rheo_entries_scope_idx").on(t.orgId, t.kind, t.state, t.visibility),
+    index("rheo_entries_space_idx").on(t.orgId, t.spaceId, t.state, t.visibility),
+    foreignKey({ columns: [t.orgId, t.spaceId], foreignColumns: [rheoSpaces.orgId, rheoSpaces.id] }).onDelete(
+      "cascade",
+    ),
     foreignKey({ columns: [t.orgId, t.createdByAgentId], foreignColumns: [agents.orgId, agents.id] }),
     foreignKey({ columns: [t.sourceRunId], foreignColumns: [agentRuns.id], name: "rheo_entry_source_run_fk" }),
   ],
@@ -43,6 +50,7 @@ export const rheoContextReceipts = pgTable(
     channelId: uuid().notNull(),
     agentId: uuid().notNull(),
     entryIds: jsonb().$type<string[]>().notNull().default([]),
+    entryRevisions: jsonb().$type<Record<string, number>>().notNull().default({}),
     messageIds: jsonb().$type<string[]>().notNull().default([]),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },

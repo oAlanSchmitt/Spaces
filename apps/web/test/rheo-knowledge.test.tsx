@@ -29,6 +29,9 @@ function backend() {
     entries: [
       {
         id: "private",
+        orgId: ORG_ID,
+        spaceId: null,
+        revision: 1,
         kind: "document",
         title: "Documento pessoal",
         body: "Conteúdo reservado ao dono",
@@ -39,6 +42,9 @@ function backend() {
       },
       {
         id: "memory",
+        orgId: ORG_ID,
+        spaceId: null,
+        revision: 1,
         kind: "memory",
         title: "Preferência proposta",
         body: "Usar linguagem simples",
@@ -49,6 +55,9 @@ function backend() {
       },
       {
         id: "shared",
+        orgId: ORG_ID,
+        spaceId: null,
+        revision: 1,
         kind: "document",
         title: "Brief aprovado",
         body: "Contexto do projeto",

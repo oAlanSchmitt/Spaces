@@ -20,7 +20,7 @@ export async function lastRheoArchive(db: Executor, orgId: string): Promise<{ id
 
 const TOOLS: Record<RheoPolicy["kind"], ReadonlySet<string>> = {
   control: new Set(["rheo_list", "rheo_create_project", "rheo_inspect"]),
-  project: new Set(["rheo_context", "rheo_memory", "rheo_documents", "rheo_tasks", "rheo_inspect"]),
+  project: new Set(["rheo_context", "rheo_memory", "rheo_documents", "rheo_tasks", "rheo_inspect", "rheo_work"]),
 };
 
 /** No cache: archiving and missing policy must take effect on the next action. */

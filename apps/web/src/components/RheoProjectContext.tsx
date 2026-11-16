@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { useOrg } from "@/components/org-context";
 import { RheoKnowledgeDialog } from "@/components/RheoKnowledgeDialog";
 import { SpacesCodexHandoff } from "@/components/SpacesCodexHandoff";
+import { SpacesProjectWork } from "@/components/SpacesProjectWork";
 import { rheoOverviewKey, rheoSpacesApi } from "@/lib/rheo-spaces";
 import "./rheo-knowledge.css";
 
@@ -15,6 +16,8 @@ export function RheoProjectContext() {
   const { t } = useTranslation();
   const [knowledge, setKnowledge] = useState(false);
   const [handoff, setHandoff] = useState<string | null>(null);
+  const [spaceKnowledge, setSpaceKnowledge] = useState(false);
+  const [work, setWork] = useState(false);
   const overview = useQuery({
     queryKey: rheoOverviewKey(me.user.id),
     queryFn: rheoSpacesApi.overview,
@@ -48,13 +51,11 @@ export function RheoProjectContext() {
         <Button size="sm" variant="link" onClick={() => setKnowledge(true)}>
           {t("rheoSpaces.knowledge.open")}
         </Button>
-        <Button
-          size="sm"
-          variant="link"
-          disabled={context.project.state === "archived"}
-          onClick={() => setHandoff(context.project.id)}
-        >
-          {t("rheoSpaces.handoff.open")}
+        <Button size="sm" variant="link" onClick={() => setSpaceKnowledge(true)}>
+          {t("rheoSpaces.knowledge.sharedOpen")}
+        </Button>
+        <Button size="sm" variant="link" onClick={() => setWork(true)}>
+          {t("rheoSpaces.work.open")}
         </Button>
       </nav>
       {knowledge && (
@@ -66,6 +67,19 @@ export function RheoProjectContext() {
       )}
       {handoff === context.project.id && (
         <SpacesCodexHandoff project={context.project} onClose={() => setHandoff(null)} />
+      )}
+      {spaceKnowledge && (
+        <RheoKnowledgeDialog key={context.space.id} space={context.space} onClose={() => setSpaceKnowledge(false)} />
+      )}
+      {work && (
+        <SpacesProjectWork
+          project={context.project}
+          onClose={() => setWork(false)}
+          onHandoff={() => {
+            setHandoff(context.project.id);
+            setWork(false);
+          }}
+        />
       )}
     </>
   );

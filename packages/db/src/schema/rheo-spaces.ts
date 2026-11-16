@@ -98,6 +98,7 @@ export const rheoProjects = pgTable(
   },
   (t) => [
     unique().on(t.orgId, t.requestKey),
+    unique().on(t.nativeOrgId, t.id),
     foreignKey({ columns: [t.orgId, t.spaceId], foreignColumns: [rheoSpaces.orgId, rheoSpaces.id] }).onDelete(
       "cascade",
     ),

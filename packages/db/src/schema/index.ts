@@ -20,6 +20,7 @@ export * from "./operator";
 export * from "./push";
 export * from "./rheo-knowledge";
 export * from "./rheo-spaces";
+export * from "./rheo-work";
 export * from "./runtime";
 export * from "./sandbox";
 export * from "./skills";

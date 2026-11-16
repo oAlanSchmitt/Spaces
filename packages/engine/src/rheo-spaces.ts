@@ -201,7 +201,7 @@ export async function createRheoBusiness(db: Database, userId: string, input: { 
       .select()
       .from(rheoBusinesses)
       .where(and(eq(rheoBusinesses.orgId, control.orgId), sql`lower(${rheoBusinesses.name}) = lower(${name})`));
-    if (existing) throw new ValidationError("Já existe um negócio com este nome.");
+    if (existing) throw new ValidationError("Já existe uma área com este nome.");
     const [business] = await tx.insert(rheoBusinesses).values({ orgId: control.orgId, name }).returning();
     if (!business) throw new Error("business insert returned nothing");
     return { id: business.id, name: business.name };
@@ -228,7 +228,7 @@ export async function createRheoSpace(db: Database, userId: string, input: { bus
           sql`lower(${rheoSpaces.name}) = lower(${name})`,
         ),
       );
-    if (existing) throw new ValidationError("Já existe um espaço com este nome neste negócio.");
+    if (existing) throw new ValidationError("Já existe um espaço com este nome nesta área.");
     const [space] = await tx
       .insert(rheoSpaces)
       .values({ orgId: control.orgId, businessId: business.id, name })

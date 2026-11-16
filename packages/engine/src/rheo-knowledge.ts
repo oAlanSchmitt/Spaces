@@ -1,19 +1,60 @@
-import { and, type Database, desc, type Executor, eq, inArray, lt, or, schema } from "@agenteschat/db";
+import {
+  and,
+  asc,
+  type Database,
+  desc,
+  type Executor,
+  eq,
+  inArray,
+  isNull,
+  lt,
+  or,
+  schema,
+  sql,
+} from "@agenteschat/db";
 import { UUID } from "./authority";
-import { ForbiddenError, NotFoundError, ValidationError } from "./errors";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "./errors";
 import { requireActiveMembership } from "./organizations";
 import { assertRheoRun, readRheoPolicy } from "./rheo-policy";
 
 export type RheoEntry = typeof schema.rheoEntries.$inferSelect;
 export type RheoEntryInput = Pick<RheoEntry, "kind" | "title" | "body"> & { visibility?: RheoEntry["visibility"] };
 
-async function lockRheoWorkspace(db: Executor, orgId: string) {
-  const [workspace] = await db
+async function lockRheoWorkspaces(db: Executor, orgIds: string[]) {
+  const workspaces = await db
     .select({ orgId: schema.rheoWorkspaces.orgId })
     .from(schema.rheoWorkspaces)
-    .where(eq(schema.rheoWorkspaces.orgId, orgId))
+    .where(inArray(schema.rheoWorkspaces.orgId, [...new Set(orgIds)]))
+    .orderBy(asc(schema.rheoWorkspaces.orgId))
     .for("update");
-  if (!workspace) throw new ForbiddenError();
+  if (workspaces.length !== new Set(orgIds).size) throw new ForbiddenError();
+}
+
+export async function requireRheoSpaceOwner(db: Executor, userId: string, spaceId: string) {
+  if (!UUID.test(spaceId)) throw new ValidationError("Identificador de espaço inválido.");
+  const [space] = await db.select().from(schema.rheoSpaces).where(eq(schema.rheoSpaces.id, spaceId));
+  if (!space) throw new ForbiddenError();
+  const policy = await requireRheoOwner(db, userId, space.orgId);
+  if (policy.kind !== "control" || policy.state !== "active" || policy.controlOrgId !== space.orgId)
+    throw new ForbiddenError();
+  return { space, policy };
+}
+
+/** Only the explicit project mapping grants access to its owner's common space knowledge. */
+async function runEntryScope(db: Executor, orgId: string, allowArchived = false) {
+  const local = and(eq(schema.rheoEntries.orgId, orgId), isNull(schema.rheoEntries.spaceId));
+  const policy = await readRheoPolicy(db, orgId);
+  if (!policy || (!allowArchived && policy.state !== "active")) throw new ForbiddenError();
+  if (policy.kind !== "project") return undefined;
+  const [project] = await db.select().from(schema.rheoProjects).where(eq(schema.rheoProjects.nativeOrgId, orgId));
+  // Older standalone protected workspaces have no catalog mapping and remain project-only.
+  if (!project) return local;
+  if ((!allowArchived && project.state !== "active") || project.orgId !== policy.controlOrgId)
+    throw new ForbiddenError();
+  const { policy: control } = await requireRheoSpaceOwner(db, policy.ownerUserId, project.spaceId);
+  await requireRheoOwner(db, policy.ownerUserId, orgId);
+  if (control.orgId !== project.orgId) throw new ForbiddenError();
+  return or(local, and(eq(schema.rheoEntries.orgId, project.orgId), eq(schema.rheoEntries.spaceId, project.spaceId)));
 }
 
 export async function requireRheoOwner(db: Executor, userId: string, orgId: string) {
@@ -25,16 +66,15 @@ export async function requireRheoOwner(db: Executor, userId: string, orgId: stri
 }
 
 export async function listRheoRunEntries(db: Executor, orgId: string, kind?: RheoEntry["kind"], id?: string) {
-  const policy = await readRheoPolicy(db, orgId);
-  if (policy?.state !== "active") throw new ForbiddenError();
-  if (policy.kind !== "project") return [];
+  const scope = await runEntryScope(db, orgId);
+  if (!scope) return [];
   if (id && !UUID.test(id)) throw new ValidationError("Identificador de documento inválido.");
   const entries = await db
     .select()
     .from(schema.rheoEntries)
     .where(
       and(
-        eq(schema.rheoEntries.orgId, orgId),
+        scope,
         eq(schema.rheoEntries.state, "approved"),
         eq(schema.rheoEntries.visibility, "project"),
         ...(kind ? [eq(schema.rheoEntries.kind, kind)] : []),
@@ -44,23 +84,26 @@ export async function listRheoRunEntries(db: Executor, orgId: string, kind?: Rhe
     .orderBy(desc(schema.rheoEntries.createdAt), desc(schema.rheoEntries.id))
     .limit(id ? 1 : 100);
   const sources = await rheoSourceGraph(db, orgId);
-  return entries.filter((entry) => sources.entry(entry.id) !== null);
+  return entries.filter((entry) => sources.entry(entry.id, undefined, entry.revision) !== null);
 }
 
 /** Metadata only: provenance remains transitive even for receipts written before dependencies were flattened. */
 // shortcut: validates the project's metadata graph in memory; move to incremental queries if long histories slow validation.
 async function rheoSourceGraph(db: Executor, orgId: string, messageIds: string[] = []) {
+  const scope = await runEntryScope(db, orgId);
   const [entries, receipts] = await Promise.all([
     db
       .select({
         id: schema.rheoEntries.id,
+        spaceId: schema.rheoEntries.spaceId,
+        revision: schema.rheoEntries.revision,
         state: schema.rheoEntries.state,
         visibility: schema.rheoEntries.visibility,
         sourceRunId: schema.rheoEntries.sourceRunId,
         createdByAgentId: schema.rheoEntries.createdByAgentId,
       })
       .from(schema.rheoEntries)
-      .where(eq(schema.rheoEntries.orgId, orgId)),
+      .where(scope ?? sql`false`),
     db
       .select({ receipt: schema.rheoContextReceipts })
       .from(schema.rheoContextReceipts)
@@ -95,9 +138,15 @@ async function rheoSourceGraph(db: Executor, orgId: string, messageIds: string[]
     for (const id of from) target.add(id);
     return true;
   };
-  function entry(id: string, withinRun?: string): Set<string> | null {
+  function entry(id: string, withinRun?: string, revision?: number): Set<string> | null {
     const item = entriesById.get(id);
-    if (item?.state !== "approved" || item.visibility !== "project" || (item.createdByAgentId && !item.sourceRunId))
+    if (
+      item?.state !== "approved" ||
+      item.visibility !== "project" ||
+      (revision !== undefined && item.revision !== revision) ||
+      (item.createdByAgentId && !item.sourceRunId) ||
+      (item.spaceId && (item.sourceRunId || item.createdByAgentId))
+    )
       return null;
     // A run's own new task inherits its other sources, already checked by that run, without a self-edge.
     const inherited = item.sourceRunId && item.sourceRunId !== withinRun ? run(item.sourceRunId) : new Set<string>();
@@ -118,13 +167,24 @@ async function rheoSourceGraph(db: Executor, orgId: string, messageIds: string[]
     checking.add(id);
     const sources = new Set<string>();
     const valid =
-      receipt.entryIds.every((id) => merge(sources, entry(id, receipt.runId))) &&
-      receipt.messageIds.every((id) => merge(sources, message(id, receipt.channelId)));
+      receipt.entryIds.every((id) => {
+        const item = entriesById.get(id);
+        const revision = receipt.entryRevisions[id];
+        // Legacy receipts only predate revision 1 of local sources; shared sources always need a snapshot.
+        if (revision === undefined && (!item || item.spaceId || item.revision !== 1)) return false;
+        return merge(sources, entry(id, receipt.runId, revision));
+      }) && receipt.messageIds.every((id) => merge(sources, message(id, receipt.channelId)));
     checking.delete(id);
     checked.set(id, valid ? sources : null);
     return valid ? sources : null;
   }
-  return { entry, message, run };
+  return {
+    entry,
+    message,
+    run,
+    revision: (id: string) => entriesById.get(id)?.revision,
+    shared: (id: string) => Boolean(entriesById.get(id)?.spaceId),
+  };
 }
 
 /** Unclassified agent output and revoked derivatives stay visible to people, outside future model contexts. */
@@ -151,6 +211,45 @@ export async function listRheoEntries(
   options: { beforeId?: string; limit?: number } = {},
 ) {
   await requireRheoOwner(db, userId, orgId);
+  const policy = await readRheoPolicy(db, orgId);
+  const scope = policy?.kind === "project" ? await runEntryScope(db, orgId, true) : undefined;
+  return listEntries(
+    db,
+    orgId,
+    null,
+    options,
+    scope
+      ? or(
+          and(eq(schema.rheoEntries.orgId, orgId), isNull(schema.rheoEntries.spaceId)),
+          and(scope, eq(schema.rheoEntries.state, "approved"), eq(schema.rheoEntries.visibility, "project")),
+        )
+      : undefined,
+  );
+}
+
+export async function listRheoSpaceEntries(
+  db: Executor,
+  userId: string,
+  spaceId: string,
+  options: { beforeId?: string; limit?: number } = {},
+) {
+  const { space } = await requireRheoSpaceOwner(db, userId, spaceId);
+  return listEntries(db, space.orgId, spaceId, options);
+}
+
+async function listEntries(
+  db: Executor,
+  orgId: string,
+  spaceId: string | null,
+  options: { beforeId?: string; limit?: number },
+  inheritedScope?: ReturnType<typeof or>,
+) {
+  const scope =
+    inheritedScope ??
+    and(
+      eq(schema.rheoEntries.orgId, orgId),
+      spaceId ? eq(schema.rheoEntries.spaceId, spaceId) : isNull(schema.rheoEntries.spaceId),
+    );
   const limit = options.limit ?? 50;
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 201 || (options.beforeId && !UUID.test(options.beforeId)))
     throw new ValidationError("Página de conhecimento inválida.");
@@ -158,7 +257,7 @@ export async function listRheoEntries(
     ? await db
         .select({ createdAt: schema.rheoEntries.createdAt, id: schema.rheoEntries.id })
         .from(schema.rheoEntries)
-        .where(and(eq(schema.rheoEntries.orgId, orgId), eq(schema.rheoEntries.id, options.beforeId)))
+        .where(and(scope, eq(schema.rheoEntries.id, options.beforeId)))
     : [];
   if (options.beforeId && !cursor) throw new NotFoundError();
   return db
@@ -166,7 +265,7 @@ export async function listRheoEntries(
     .from(schema.rheoEntries)
     .where(
       and(
-        eq(schema.rheoEntries.orgId, orgId),
+        scope,
         ...(cursor
           ? [
               or(
@@ -198,7 +297,7 @@ function checkedEntry(input: RheoEntryInput) {
 export async function createRheoEntry(db: Database, userId: string, orgId: string, input: RheoEntryInput) {
   const values = checkedEntry(input);
   return db.transaction(async (tx) => {
-    await lockRheoWorkspace(tx, orgId);
+    await lockRheoWorkspaces(tx, [orgId]);
     const policy = await requireRheoOwner(tx, userId, orgId);
     if (policy.kind !== "project" || policy.state !== "active")
       throw new ForbiddenError("Este projeto não aceita alterações.");
@@ -207,6 +306,27 @@ export async function createRheoEntry(db: Database, userId: string, orgId: strin
       .values({
         ...values,
         orgId,
+        state: "approved",
+        createdByUserId: userId,
+      })
+      .returning();
+    if (!entry) throw new Error("Entry insert returned nothing");
+    return entry;
+  });
+}
+
+export async function createRheoSpaceEntry(db: Database, userId: string, spaceId: string, input: RheoEntryInput) {
+  const values = checkedEntry(input);
+  return db.transaction(async (tx) => {
+    const initial = await requireRheoSpaceOwner(tx, userId, spaceId);
+    await lockRheoWorkspaces(tx, [initial.space.orgId]);
+    const { space } = await requireRheoSpaceOwner(tx, userId, spaceId);
+    const [entry] = await tx
+      .insert(schema.rheoEntries)
+      .values({
+        ...values,
+        orgId: space.orgId,
+        spaceId,
         state: "approved",
         createdByUserId: userId,
       })
@@ -225,13 +345,79 @@ export async function reviewRheoEntry(
 ) {
   if (!["approved", "archived"].includes(state)) throw new ValidationError("Escolha aprovar ou arquivar.");
   return db.transaction(async (tx) => {
-    await lockRheoWorkspace(tx, orgId);
+    await lockRheoWorkspaces(tx, [orgId]);
     const policy = await requireRheoOwner(tx, userId, orgId);
     if (policy.state !== "active") throw new ForbiddenError("Este projeto está arquivado.");
     const [entry] = await tx
       .update(schema.rheoEntries)
-      .set({ state, updatedAt: new Date() })
-      .where(and(eq(schema.rheoEntries.orgId, orgId), eq(schema.rheoEntries.id, id)))
+      .set({ state, revision: sql`${schema.rheoEntries.revision} + 1`, updatedAt: new Date() })
+      .where(
+        and(eq(schema.rheoEntries.orgId, orgId), isNull(schema.rheoEntries.spaceId), eq(schema.rheoEntries.id, id)),
+      )
+      .returning();
+    if (!entry) throw new NotFoundError();
+    return entry;
+  });
+}
+
+export async function reviewRheoSpaceEntry(
+  db: Database,
+  userId: string,
+  spaceId: string,
+  id: string,
+  state: "approved" | "archived",
+) {
+  return updateRheoSpaceEntry(db, userId, spaceId, id, { state });
+}
+
+export type RheoSpaceEntryUpdate = Partial<Pick<RheoEntry, "title" | "body" | "visibility">> & {
+  state?: "approved" | "archived";
+  revision?: number;
+};
+
+export async function updateRheoSpaceEntry(
+  db: Database,
+  userId: string,
+  spaceId: string,
+  id: string,
+  input: RheoSpaceEntryUpdate,
+) {
+  if (
+    !Object.keys(input).some((key) => key !== "revision") ||
+    Object.keys(input).some((key) => !["title", "body", "visibility", "state", "revision"].includes(key)) ||
+    (input.revision !== undefined && (!Number.isSafeInteger(input.revision) || input.revision < 1)) ||
+    (input.title !== undefined && (!input.title.trim() || input.title.trim().length > 160)) ||
+    (input.body !== undefined && input.body.length > 40_000) ||
+    (input.visibility !== undefined && !["project", "owner"].includes(input.visibility)) ||
+    (input.state !== undefined && !["approved", "archived"].includes(input.state))
+  )
+    throw new ValidationError("Verifique o título, o conteúdo e o estado deste registo.");
+  return db.transaction(async (tx) => {
+    const initial = await requireRheoSpaceOwner(tx, userId, spaceId);
+    await lockRheoWorkspaces(tx, [initial.space.orgId]);
+    const { space } = await requireRheoSpaceOwner(tx, userId, spaceId);
+    const scope = and(
+      eq(schema.rheoEntries.orgId, space.orgId),
+      eq(schema.rheoEntries.spaceId, spaceId),
+      eq(schema.rheoEntries.id, id),
+    );
+    const [current] = await tx.select({ revision: schema.rheoEntries.revision }).from(schema.rheoEntries).where(scope);
+    if (!current) throw new NotFoundError();
+    if (input.revision !== undefined && input.revision !== current.revision)
+      throw new ConflictError(
+        "Este registo foi alterado. Atualize o conhecimento antes de guardar.",
+        "version_conflict",
+      );
+    const { revision: _revision, ...values } = input;
+    const [entry] = await tx
+      .update(schema.rheoEntries)
+      .set({
+        ...values,
+        ...(input.title !== undefined ? { title: input.title.trim() } : {}),
+        revision: sql`${schema.rheoEntries.revision} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(scope)
       .returning();
     if (!entry) throw new NotFoundError();
     return entry;
@@ -245,9 +431,10 @@ export async function withRheoPublication<T>(
   runId: string,
   work: (tx: Executor) => Promise<T>,
 ): Promise<T> {
-  if (!(await readRheoPolicy(db, orgId))) return work(db);
+  const policy = await readRheoPolicy(db, orgId);
+  if (!policy) return work(db);
   return db.transaction(async (tx) => {
-    await lockRheoWorkspace(tx, orgId);
+    await lockRheoWorkspaces(tx, [orgId, policy.controlOrgId]);
     await assertRheoSourcesCurrent(tx, orgId, runId);
     return work(tx);
   });
@@ -261,6 +448,7 @@ export async function recordRheoSources(
     channelId: string;
     agentId: string;
     entryIds: string[];
+    entryRevisions?: Record<string, number>;
     messageIds?: string[];
   },
 ) {
@@ -286,8 +474,12 @@ export async function recordRheoSources(
     const entryIds = new Set([...(old?.entryIds ?? []), ...input.entryIds]);
     const messageIds = [...new Set([...(old?.messageIds ?? []), ...(input.messageIds ?? [])])];
     const sources = await rheoSourceGraph(tx, input.orgId, messageIds);
+    if (input.entryIds.some((id) => sources.shared(id) && input.entryRevisions?.[id] === undefined))
+      throw new ForbiddenError("A revisão desta fonte comum não foi indicada.", "rheo.context_revoked");
+    if (old && sources.run(input.runId) === null)
+      throw new ForbiddenError("Este contexto foi revogado.", "rheo.context_revoked");
     for (const id of [...entryIds]) {
-      const inherited = sources.entry(id);
+      const inherited = sources.entry(id, undefined, input.entryRevisions?.[id]);
       if (!inherited) throw new ForbiddenError("Esta fonte não está autorizada.", "rheo.context_revoked");
       for (const source of inherited) entryIds.add(source);
     }
@@ -296,10 +488,14 @@ export async function recordRheoSources(
       if (!inherited) throw new ForbiddenError("Esta mensagem não tem contexto autorizado.", "rheo.context_revoked");
       for (const source of inherited) entryIds.add(source);
     }
+    const entryRevisions = Object.fromEntries([...entryIds].map((id) => [id, sources.revision(id) as number]));
     await tx
       .insert(schema.rheoContextReceipts)
-      .values({ ...input, entryIds: [...entryIds], messageIds })
-      .onConflictDoUpdate({ target: schema.rheoContextReceipts.runId, set: { entryIds: [...entryIds], messageIds } });
+      .values({ ...input, entryIds: [...entryIds], entryRevisions, messageIds })
+      .onConflictDoUpdate({
+        target: schema.rheoContextReceipts.runId,
+        set: { entryIds: [...entryIds], entryRevisions, messageIds },
+      });
   });
 }
 

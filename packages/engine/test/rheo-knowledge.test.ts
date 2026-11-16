@@ -1,12 +1,16 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { eq, schema } from "@agenteschat/db";
-import { createOrganization, insertMessage, postPersonMessage } from "../src";
+import { bootstrapRheoSpaces, createOrganization, createRheoProject, insertMessage, postPersonMessage } from "../src";
 import {
   assertRheoSourcesCurrent,
+  createRheoEntry,
+  createRheoSpaceEntry,
   listRheoEntries,
   listRheoRunEntries,
   recordRheoSources,
   reviewRheoEntry,
+  reviewRheoSpaceEntry,
+  updateRheoSpaceEntry,
   withRheoPublication,
 } from "../src/rheo-knowledge";
 import { type Fixture, setup } from "./fixtures";
@@ -14,6 +18,176 @@ import { type Fixture, setup } from "./fixtures";
 let f: Fixture;
 beforeEach(async () => {
   f = await setup();
+});
+
+async function sharedSpaceProjects() {
+  const tree = await bootstrapRheoSpaces(f.db, f.owner.id);
+  const spaces = tree.businesses.flatMap((business) => business.spaces);
+  const space = spaces.find((candidate) => candidate.projects.length);
+  const otherSpace = spaces.find((candidate) => candidate.id !== space?.id);
+  const a = space?.projects[0];
+  if (!space || !otherSpace || !a) throw new Error("Missing synthetic scopes");
+  const b = await createRheoProject(f.db, f.owner.id, { spaceId: space.id, name: "B", requestKey: "shared-b" });
+  const c = await createRheoProject(f.db, f.owner.id, { spaceId: otherSpace.id, name: "C", requestKey: "shared-c" });
+  return { tree, space, otherSpace, a, b, c };
+}
+
+test("projects A and B inherit only their explicit common space while project C and private sources stay isolated", async () => {
+  const { tree, space, otherSpace, a, b, c } = await sharedSpaceProjects();
+  const shared = await createRheoSpaceEntry(f.db, f.owner.id, space.id, {
+    kind: "document",
+    title: "Common",
+    body: "COMMON",
+  });
+  await createRheoSpaceEntry(f.db, f.owner.id, space.id, {
+    kind: "document",
+    title: "Owner",
+    body: "OWNER",
+    visibility: "owner",
+  });
+  const archived = await createRheoSpaceEntry(f.db, f.owner.id, space.id, {
+    kind: "document",
+    title: "Revoked",
+    body: "REVOKED",
+  });
+  await reviewRheoSpaceEntry(f.db, f.owner.id, space.id, archived.id, "archived");
+  await f.db
+    .insert(schema.rheoEntries)
+    .values({ orgId: shared.orgId, spaceId: space.id, kind: "memory", title: "Pending", body: "PENDING" });
+  const local = await createRheoEntry(f.db, f.owner.id, a.orgId, {
+    kind: "document",
+    title: "A only",
+    body: "LOCAL_A",
+  });
+  expect((await listRheoRunEntries(f.db, a.orgId)).map((entry) => entry.id).sort()).toEqual(
+    [shared.id, local.id].sort(),
+  );
+  expect((await listRheoRunEntries(f.db, b.orgId)).map((entry) => entry.id)).toEqual([shared.id]);
+  expect(await listRheoRunEntries(f.db, c.orgId)).toEqual([]);
+  expect(await listRheoRunEntries(f.db, tree.controlOrgId as string)).toEqual([]);
+  expect(await listRheoRunEntries(f.db, b.orgId, undefined, local.id)).toEqual([]);
+  await expect(reviewRheoSpaceEntry(f.db, f.owner.id, otherSpace.id, shared.id, "archived")).rejects.toThrow();
+  await expect(reviewRheoEntry(f.db, f.owner.id, shared.orgId, shared.id, "archived")).rejects.toThrow();
+});
+
+test("space source revisions revoke held replies and derived project memories even after approval is restored", async () => {
+  const { space, a, b } = await sharedSpaceProjects();
+  const shared = await createRheoSpaceEntry(f.db, f.owner.id, space.id, {
+    kind: "document",
+    title: "Common",
+    body: "VERSION_ONE",
+  });
+  const [agent] = await f.db.select().from(schema.agents).where(eq(schema.agents.orgId, a.orgId));
+  if (!agent) throw new Error("Missing project agent");
+  const trigger = await postPersonMessage(f, f.owner.id, a.orgId, a.channelId, {
+    body: `@${agent.handle} Read common knowledge`,
+  });
+  const [run] = await f.db.select().from(schema.agentRuns).where(eq(schema.agentRuns.triggerMessageId, trigger.id));
+  if (!run) throw new Error("Missing project run");
+  const input = { orgId: a.orgId, runId: run.id, channelId: a.channelId, agentId: agent.id };
+  await recordRheoSources(f.db, { ...input, entryIds: [shared.id], entryRevisions: { [shared.id]: 1 } });
+  const reply = await insertMessage(f.db, {
+    orgId: a.orgId,
+    channelId: a.channelId,
+    author: { type: "agent", agentId: agent.id, runId: run.id, hop: 1 },
+    body: "Derived shared answer",
+  });
+  const [memory] = await f.db
+    .insert(schema.rheoEntries)
+    .values({
+      orgId: a.orgId,
+      kind: "memory",
+      title: "Derivative",
+      body: "DERIVED",
+      state: "approved",
+      createdByAgentId: agent.id,
+      sourceRunId: run.id,
+    })
+    .returning();
+  expect(memory).toBeDefined();
+  await assertRheoSourcesCurrent(f.db, a.orgId, run.id);
+  const updated = await updateRheoSpaceEntry(f.db, f.owner.id, space.id, shared.id, { body: "VERSION_TWO" });
+  expect(updated.revision).toBe(2);
+  expect((await listRheoRunEntries(f.db, b.orgId)).map((entry) => entry.body)).toEqual(["VERSION_TWO"]);
+  const [otherAgent] = await f.db.select().from(schema.agents).where(eq(schema.agents.orgId, b.orgId));
+  if (!otherAgent) throw new Error("Missing neighbouring agent");
+  const otherTrigger = await postPersonMessage(f, f.owner.id, b.orgId, b.channelId, {
+    body: `@${otherAgent.handle} Read the current source`,
+  });
+  const [otherRun] = await f.db
+    .select()
+    .from(schema.agentRuns)
+    .where(eq(schema.agentRuns.triggerMessageId, otherTrigger.id));
+  if (!otherRun) throw new Error("Missing neighbouring run");
+  const otherInput = {
+    orgId: b.orgId,
+    runId: otherRun.id,
+    channelId: b.channelId,
+    agentId: otherAgent.id,
+    entryIds: [shared.id],
+  };
+  // A source changed after retrieval cannot be silently receipted as its new revision.
+  await expect(recordRheoSources(f.db, { ...otherInput, entryRevisions: { [shared.id]: 1 } })).rejects.toMatchObject({
+    code: "rheo.context_revoked",
+  });
+  await recordRheoSources(f.db, { ...otherInput, entryRevisions: { [shared.id]: 2 } });
+  await assertRheoSourcesCurrent(f.db, b.orgId, otherRun.id);
+  await expect(
+    recordRheoSources(f.db, { ...input, entryIds: [shared.id], entryRevisions: { [shared.id]: 1 } }),
+  ).rejects.toMatchObject({ code: "rheo.context_revoked" });
+  await expect(withRheoPublication(f.db, a.orgId, run.id, async () => "UNSAFE")).rejects.toMatchObject({
+    code: "rheo.context_revoked",
+  });
+  expect((await listRheoRunEntries(f.db, a.orgId)).map((entry) => entry.id)).not.toContain(memory?.id);
+  await reviewRheoSpaceEntry(f.db, f.owner.id, space.id, shared.id, "archived");
+  expect(await listRheoRunEntries(f.db, b.orgId)).toEqual([]);
+  await reviewRheoSpaceEntry(f.db, f.owner.id, space.id, shared.id, "approved");
+  await expect(assertRheoSourcesCurrent(f.db, a.orgId, run.id)).rejects.toMatchObject({ code: "rheo.context_revoked" });
+  const { validRheoHistory } = await import("../src/rheo-knowledge");
+  expect(await validRheoHistory(f.db, a.orgId, a.channelId, [reply])).toEqual([]);
+});
+
+test("receipts refuse a sibling project and another space even under the same owner", async () => {
+  const { space, otherSpace, a, b } = await sharedSpaceProjects();
+  const shared = await createRheoSpaceEntry(f.db, f.owner.id, space.id, {
+    kind: "document",
+    title: "Allowed",
+    body: "Allowed",
+  });
+  const foreign = await createRheoSpaceEntry(f.db, f.owner.id, otherSpace.id, {
+    kind: "document",
+    title: "Other space",
+    body: "Denied",
+  });
+  const sibling = await createRheoEntry(f.db, f.owner.id, a.orgId, {
+    kind: "document",
+    title: "Sibling",
+    body: "Denied",
+  });
+  const ownerOnly = await createRheoSpaceEntry(f.db, f.owner.id, space.id, {
+    kind: "document",
+    title: "Owner",
+    body: "Denied",
+    visibility: "owner",
+  });
+  const [agent] = await f.db.select().from(schema.agents).where(eq(schema.agents.orgId, b.orgId));
+  if (!agent) throw new Error("Missing project agent");
+  const trigger = await postPersonMessage(f, f.owner.id, b.orgId, b.channelId, {
+    body: `@${agent.handle} Check boundaries`,
+  });
+  const [run] = await f.db.select().from(schema.agentRuns).where(eq(schema.agentRuns.triggerMessageId, trigger.id));
+  if (!run) throw new Error("Missing project run");
+  const input = { orgId: b.orgId, runId: run.id, channelId: b.channelId, agentId: agent.id };
+  for (const id of [foreign.id, sibling.id, ownerOnly.id]) {
+    await expect(recordRheoSources(f.db, { ...input, entryIds: [id] })).rejects.toMatchObject({
+      code: "rheo.context_revoked",
+    });
+  }
+  await expect(recordRheoSources(f.db, { ...input, entryIds: [shared.id] })).rejects.toMatchObject({
+    code: "rheo.context_revoked",
+  });
+  await recordRheoSources(f.db, { ...input, entryIds: [shared.id], entryRevisions: { [shared.id]: 1 } });
+  await assertRheoSourcesCurrent(f.db, b.orgId, run.id);
 });
 afterEach(async () => {
   await f?.close();

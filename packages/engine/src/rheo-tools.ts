@@ -23,6 +23,11 @@ const shape = (properties: Record<string, unknown>, required: string[] = []) => 
   additionalProperties: false,
 });
 const text = (value: unknown) => (typeof value === "string" ? value : "");
+export interface RheoWorkInput {
+  instruction: string;
+  outputPaths?: string[];
+}
+export type RheoWorkExecutor = (input: RheoWorkInput, ctx: ToolContext) => Promise<ToolOutput>;
 
 async function policyOf(ctx: ToolContext) {
   const policy = await assertRheoRun(ctx.db, { id: ctx.runId, ...ctx }, { brain: "model", bridge: ctx.bridge });
@@ -42,13 +47,15 @@ async function entriesFor(ctx: ToolContext, kind?: "document" | "memory" | "task
     channelId: ctx.channelId,
     agentId: ctx.agentId,
     entryIds: payload.entries.map((entry) => entry.id),
+    entryRevisions: Object.fromEntries(payload.entries.map((entry) => [entry.id, entry.revision])),
   });
   return {
     content: untrustedBlock("Reviewed project entries", JSON.stringify(payload), 40_000),
   };
 }
 
-export function createRheoToolSource(): ToolSource {
+export function createRheoToolSource(options: { work?: RheoWorkExecutor } = {}): ToolSource {
+  const work = options.work;
   return {
     name: "rheo-spaces",
     rheoInternal: RHEO_INTERNAL_TOOL,
@@ -95,6 +102,7 @@ export function createRheoToolSource(): ToolSource {
               entryIds: receipt?.entryIds ?? [],
               externalActions: false,
               computerExecution: false,
+              projectWorkToolAvailable: policy.kind === "project" && !!work,
             }),
           };
         },
@@ -105,7 +113,7 @@ export function createRheoToolSource(): ToolSource {
           define({
             name: "rheo_list",
             description:
-              "Lista negócios, espaços e projetos autorizados, apenas metadados. Use para escolher o destino explícito de um projeto novo.",
+              "Lista áreas, espaços e projetos autorizados, apenas metadados. Use para escolher o destino explícito de um projeto novo.",
             inputSchema: shape({}),
             async execute(_input, call) {
               const current = await policyOf(call);
@@ -153,6 +161,31 @@ export function createRheoToolSource(): ToolSource {
         ];
       return [
         inspect,
+        ...(work
+          ? [
+              define({
+                name: "rheo_work",
+                description:
+                  "Desenvolve código, executa comandos e testes locais e cria imagens na pasta explicitamente associada a este projeto, com a assinatura Codex existente. Só executa com perfil de trabalho verificado e devolve ficheiros nesta conversa. Não recebe outra pasta, não publica nem usa uma API paga. Cada chamada recebe uma sessão nova com as fontes atuais; continua a partir dos ficheiros do projeto. Erros de limite ou ferramenta indisponível são devolvidos sem trocar de provedor. Para ligar ficheiros na resposta, use exatamente os URLs absolutos devolvidos em files[].url; não invente links com caminhos relativos. Chamadas exploratórias falhadas continuam no registo calls, mas não tornam uma execução concluída num erro global.",
+                inputSchema: shape(
+                  {
+                    instruction: stringField(20_000),
+                    outputPaths: { type: "array", maxItems: 20, items: stringField(2000) },
+                  },
+                  ["instruction"],
+                ),
+                async execute(input, call) {
+                  return work(
+                    {
+                      instruction: text(input.instruction),
+                      ...(Array.isArray(input.outputPaths) ? { outputPaths: input.outputPaths.map(text) } : {}),
+                    },
+                    call,
+                  );
+                },
+              }),
+            ]
+          : []),
         define({
           name: "rheo_context",
           description:

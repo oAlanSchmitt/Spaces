@@ -1,14 +1,15 @@
 # Spaces
 
-Fork do agentes.chat para organizar negócios, clientes e projetos numa aplicação local. Cada projeto protegido usa uma organização nativa própria; o painel global conserva apenas metadados. Inclui criação de projetos pelo coordenador, conhecimento revisto e inspector de fontes, com a interface e componentes do Design System original.
+Fork do agentes.chat para organizar **Área → Espaço → Projeto** numa aplicação local. Os projetos consultam o conhecimento comum aprovado do seu Espaço e conservam conversa, contexto específico e pasta próprios. O painel global conserva apenas metadados. A interface reutiliza os componentes do Design System original.
 
-Esta versão é um **piloto protegido**: comandos, browser, conectores externos, rotinas automáticas e partilha entre projetos permanecem desativados. Não constitui substituição validada da instalação oficial nem migra dados de clientes automaticamente.
+O percurso **Trabalhar aqui** liga explicitamente o projeto a uma pasta e reutiliza o executor Codex por assinatura para desenvolver e devolver ficheiros/imagens à conversa. A execução exige conta, instalação e perfil de isolamento elegíveis. Imagens dependem da capacidade e quota reais da conta. Browser, conectores arbitrários, rotinas automáticas e publicação externa permanecem fora deste percurso. Não migra dados de clientes automaticamente.
 
 - [Decisões e âmbito](docs/rheo-spaces/DESIGN.md)
 - [Como utilizar o Spaces](docs/rheo-spaces/USAGE.md)
-- [Pasta associada e briefing para Codex](docs/rheo-spaces/CODEX-HANDOFF.md)
+- [Decisão sobre conhecimento e trabalho local](docs/adr/0186-spaces-shared-knowledge-and-local-work.md)
+- [Briefing opcional para outro ambiente](docs/rheo-spaces/CODEX-HANDOFF.md)
 - [Executar e recuperar no Windows](docs/rheo-spaces/RUNTIME.md)
-- [Plano de execução](docs/superpowers/plans/2026-11-14-rheo-spaces.md)
+- [Plano da evolução](docs/superpowers/plans/2026-11-16-spaces-shared-work.md)
 - [Progresso e evidências](docs/rheo-spaces/PROGRESS.md)
 
 Based on agentes.chat by Codari Global, LLC (https://agentes.chat). A licença e os avisos originais são preservados em [LICENSE](LICENSE), [NOTICE](NOTICE) e [TRADEMARKS.md](TRADEMARKS.md).

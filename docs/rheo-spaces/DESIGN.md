@@ -1,5 +1,7 @@
 # Spaces — adaptação autorizada
 
+Revisão de 16/11/2026: o utilizador autorizou conhecimento comum por Espaço e trabalho/imagens na conversa, com o rótulo Área. [ADR 0186](../adr/0186-spaces-shared-knowledge-and-local-work.md) e [plano da evolução](../superpowers/plans/2026-11-16-spaces-shared-work.md) definem o contrato atual. O registo abaixo conserva as decisões e limites do piloto inicial. A prova de leitura dessa fase não habilita o novo perfil de trabalho.
+
 Data: 14/11/2026. Base: `071026d41f293d26cca480874cad5f66658d716c`.
 
 O utilizador aprovou a análise e autorizou criar o fork, aplicar a separação de projetos e acrescentar criação interna de projetos por agentes. A especificação original é `Plano completo para personalizar o agentes.chat.md`, versão 1.0. Esta entrega começa pelo piloto protegido acordado; funcionalidades não validadas ficam desativadas, incluindo execução de comandos e publicação externa.

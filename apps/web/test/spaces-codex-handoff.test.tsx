@@ -276,12 +276,14 @@ test("switching accounts discards drafts and the prepared briefing for the previ
 });
 
 for (const surface of ["catalog", "conversation"] as const) {
-  test(`${surface} opens handoff on demand and archived projects keep the action disabled`, async () => {
+  test(`${surface} opens optional briefing through project work without fetching it in advance`, async () => {
     const fake = backend();
     const handoffFetch = globalThis.fetch;
     const currentProject = { ...project, orgId: ORG_ID };
     const archived = { ...project, id: "archived-project", name: "Projeto arquivado", state: "archived" };
     globalThis.fetch = (async (input, init) => {
+      if (String(input).endsWith("/work"))
+        return Response.json({ folderPath: null, revision: null, configured: false, status: "unconfigured" });
       if (String(input) === "/api/app/spaces/codex")
         return Response.json({
           installed: false,
@@ -298,7 +300,7 @@ for (const surface of ["catalog", "conversation"] as const) {
           businesses: [
             {
               id: "business",
-              name: "Negócio",
+              name: "Área",
               spaces: [{ id: "space", name: "Cliente", projects: [currentProject, archived] }],
             },
           ],
@@ -310,16 +312,15 @@ for (const surface of ["catalog", "conversation"] as const) {
       org: true,
     });
     expect(fake.reads).toEqual([]);
-    if (surface === "catalog")
-      expect(
-        (screen().getByRole("button", { name: "Continuar Projeto arquivado no Codex" }) as HTMLButtonElement).disabled,
-      ).toBe(true);
     await click(
       screen().getByRole("button", {
-        name: surface === "catalog" ? "Continuar Portal do cliente no Codex" : "Continuar no Codex",
+        name: surface === "catalog" ? "Trabalhar em Portal do cliente" : "Trabalhar aqui",
       }),
     );
     await settle(4);
+    expect(fake.reads).toEqual([]);
+    await click(screen().getByRole("button", { name: "Exportar briefing" }));
+    await settle(3);
     expect(screen().getByRole("dialog", { name: "Continuar no Codex" })).toBeTruthy();
     expect(fake.reads).toHaveLength(1);
   });

@@ -105,7 +105,7 @@ test("initializes the account, then creates business, client space and an isolat
   await renderPage(<RheoSpacesPage />, { api: createFakeApi(), org: true });
   await click(screen().getByRole("button", { name: "Preparar meus espaços" }));
   await settle(4);
-  await create("Criar negócio", "Profissional");
+  await create("Criar área", "Profissional");
   await create("Criar espaço em Profissional", "Cliente exemplo");
   await create("Criar projeto em Cliente exemplo", "Site institucional");
   const link = screen().getByRole("link", { name: "Abrir Site institucional" });

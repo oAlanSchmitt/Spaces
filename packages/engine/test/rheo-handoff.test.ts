@@ -256,3 +256,36 @@ test("briefing declares the native recent-source window rather than suggesting a
   expect(prepared.entryIds.length + prepared.omittedCount).toBe(100);
   for (const id of prepared.entryIds) expect(prepared.briefing).toContain(id);
 });
+
+test("a new project briefing inherits the space source without copying private knowledge from its neighbour", async () => {
+  const space = tree.businesses
+    .flatMap((business) => business.spaces)
+    .find((candidate) => candidate.projects.some((p) => p.id === project.id));
+  if (!space) throw new Error("Missing project space");
+  const common = await engine.createRheoSpaceEntry(f.db, f.owner.id, space.id, {
+    kind: "document",
+    title: "Common method",
+    body: "COMMON_HANDOFF_SOURCE",
+  });
+  await engine.createRheoEntry(f.db, f.owner.id, project.orgId, {
+    kind: "document",
+    title: "Private project",
+    body: "NEIGHBOUR_PRIVATE",
+  });
+  const fresh = await engine.createRheoProject(f.db, f.owner.id, {
+    spaceId: space.id,
+    name: "Fresh inherited",
+    requestKey: "fresh-inherited-handoff",
+  });
+  const prepared = await engine.prepareRheoProjectHandoff(f.db, f.owner.id, fresh.id, input);
+  expect(prepared.entryIds).toEqual([common.id]);
+  expect(prepared.entryRevisions).toEqual({ [common.id]: 1 });
+  expect(prepared.briefing).toContain("COMMON_HANDOFF_SOURCE");
+  expect(prepared.briefing).toContain(space.id);
+  expect(prepared.briefing).not.toContain("NEIGHBOUR_PRIVATE");
+  expect(await f.db.select().from(schema.rheoEntries).where(eq(schema.rheoEntries.orgId, fresh.orgId))).toHaveLength(0);
+  await engine.reviewRheoSpaceEntry(f.db, f.owner.id, space.id, common.id, "archived");
+  const after = await engine.prepareRheoProjectHandoff(f.db, f.owner.id, fresh.id, input);
+  expect(after.entryIds).toEqual([]);
+  expect(after.briefing).not.toContain("COMMON_HANDOFF_SOURCE");
+});

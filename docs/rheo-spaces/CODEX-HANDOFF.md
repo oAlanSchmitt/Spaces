@@ -1,5 +1,7 @@
 # Projeto, pasta e continuidade no Codex
 
+Atualização de 16/11/2026: este fluxo permanece como **Trabalhar aqui → Exportar briefing**, uma alternativa auxiliar. O percurso de desenvolvimento na conversa usa uma associação de execução separada, definida no [ADR 0186](../adr/0186-spaces-shared-knowledge-and-local-work.md) e no [guia atual](USAGE.md). A referência de pasta deste documento não concede nem revoga esse acesso. O registo seguinte descreve a entrega histórica do briefing.
+
 Data: 15/11/2026. Âmbito autorizado: primeira opção escolhida pelo utilizador após o conselho.
 
 ## Resultado

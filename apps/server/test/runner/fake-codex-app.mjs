@@ -163,11 +163,51 @@ function appServer() {
         total.input = 0;
         total.cached = 0;
         total.output = 0;
-        ok({ thread: { id: THREAD }, model: params.model ?? "gpt-5.5", cwd: params.cwd });
+        ok({
+          thread: {
+            id: THREAD,
+            ...(params.permissions
+              ? { environments: process.env.FAKE_CODEX_INVALID_LOCAL ? [] : params.environments }
+              : {}),
+          },
+          model: params.model ?? "gpt-5.5",
+          cwd: params.cwd,
+          ...(params.permissions
+            ? {
+                activePermissionProfile: { id: params.permissions, extends: null },
+                approvalPolicy: params.approvalPolicy,
+                runtimeWorkspaceRoots: params.runtimeWorkspaceRoots,
+                sandbox: { networkAccess: false },
+                instructionSources: [],
+                modelProvider: "openai",
+              }
+            : {}),
+        });
         return note("thread/started", { thread: { id: THREAD } });
       case "thread/resume":
         if (params.threadId !== THREAD) return fail(`no rollout found for thread id ${params.threadId}`);
-        return ok({ thread: { id: THREAD }, model: params.model ?? "gpt-5.5", cwd: params.cwd });
+        return ok({
+          thread: {
+            id: THREAD,
+            ...(params.permissions
+              ? { environments: process.env.FAKE_CODEX_INVALID_LOCAL ? [] : params.environments }
+              : {}),
+          },
+          model: params.model ?? "gpt-5.5",
+          cwd: params.cwd,
+          ...(params.permissions
+            ? {
+                activePermissionProfile: { id: params.permissions, extends: null },
+                approvalPolicy: params.approvalPolicy,
+                runtimeWorkspaceRoots: params.runtimeWorkspaceRoots,
+                sandbox: { networkAccess: false },
+                instructionSources: [],
+                modelProvider: "openai",
+              }
+            : {}),
+        });
+      case "environment/status":
+        return ok({ status: "ready" });
       case "turn/start": {
         if (active) return fail("a turn is already running");
         const prompt = params.input.map((i) => i.text).join("\n");
