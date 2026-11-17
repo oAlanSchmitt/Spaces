@@ -1,6 +1,12 @@
 # Execução — Spaces
 
-## Estado atual — 16/11/2026
+## Estado atual — 17/11/2026
+
+- Auditoria final Ponytail/REA: corrigidas exportação por hardlink, licenças npm no Windows e resolução da raiz privada no bundle; verificação de integridade otimizada. [Relatório final](AUDIT-FINAL-DESKTOP.md).
+- Executável entregue: `C:/Users/alan-/Desktop/Spaces.exe`; release congelada `spaces-0b2e2f4b2661`, publicada no fork. Dados/login preservados, backup frio verificado. Não mover nem apagar a pasta do fork.
+- Arranque normal observado em 21,09 s; integridade em 1,42 s; segunda abertura reutilizou PID 27868. Health/DB prontos, interface autenticada confirmou catálogo e pasta pronta. Nenhuma chamada de modelo nesta auditoria.
+
+## Entrega da evolução — 16/11/2026
 
 - Evolução autorizada e implementada: Área → Espaço → Projeto, base comum canónica por Espaço, contexto específico do projeto e trabalho/imagens na própria conversa.
 - Reutilização do `CodexAppServers`, artefactos e Design System existentes, sem novas dependências de aplicação. Associação explícita da pasta e execução condicionada ao perfil local verificado. Briefing mantido como alternativa auxiliar.

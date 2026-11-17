@@ -24,6 +24,22 @@ Dados e login permanecem em `.rheo/pilot-data`; o pacote não contém credenciai
 - Ponytail: regressão hardlink RED/GREEN, 12 testes/74 asserções de trabalho Windows incluindo junction; tipos do servidor e Biome passaram.
 - Raiz/pacote/provas: 34 testes/173 asserções comunicados pelo executor, mais tipos do servidor e Biome de sete ficheiros.
 - Coordenador: 16 testes/76 asserções de manutenção/raiz/pacote, um teste de junction omitido dentro do sandbox. Seis testes/9 asserções específicos da release passaram. Grupos sobrepõem-se e não devem ser somados como cobertura única.
-- Boundaries e migrations passaram. A validação final do artefacto gerado e do arranque será registada depois da construção.
+- Boundaries e migrations passaram. Tipos do servidor/web e Biome dos dez ficheiros TypeScript afetados passaram. O verificador final da release passou 10 testes/16 asserções, incluindo junctions reais na árvore e nos ancestrais.
+
+## Entrega observada
+
+- Executável: `C:/Users/alan-/Desktop/Spaces.exe`, 14.336 bytes. Código congelado: `0b2e2f4b2661ef82452be45d5fe5c1363a595ee7`, publicado no fork; versão `spaces-0b2e2f4b2661`.
+- SHA-256 do executável: `49875f90eb3f1e98bf0659a6c88b3348d9f3f8bbabdf30a665caa67f117fdb0d`. Pacote local: 1.068 ficheiros, aproximadamente 206 MB, licenças de 90 pacotes incorporados. Nenhum dado/login foi incluído.
+- REA confirmou PE32/.NET AnyCPU, subsistema Windows GUI e os três hashes de bootstrap. A inspeção estática e o arranque são evidências independentes.
+- Abertura normal pelo executável: saída 0 e navegador padrão aberto em `localhost:4410/login`, em 21,09 s. Verificação isolada: saída 0 em 1,42 s. Segunda abertura: mesmo PID **27868** e mesmo launchId, em 5,75 s, com health/DB prontos na versão exata.
+- A sessão autenticada no navegador interno confirmou catálogo, estado geral Codex pronto, pasta original do projeto e **Pronto para trabalhar**, após recarregar a release final. O navegador padrão pede a sessão local porque tem cookies distintos; não foram transferidas credenciais.
+- Backup frio anterior: 2.063 ficheiros, ACL privada, `.rheo/backups/20261117T115250495Z-b04429e0d5ed4380898ec61771571b60`. O recibo antigo de um processo já encerrado foi arquivado após confirmar ausência do processo e exclusão da base. A primeira release de teste foi encerrada pelo supervisor, com saída limpa, antes da entrega final.
+- A configuração de trabalho continua com o mesmo digest `8bbdd3ed436c56562c185e5b93bfebb5b33c7608710ac5be22cfa7aee5c98154`; o leitor de produção aceitou a prova existente, sem chamadas de modelo. Recibos privados: `.rheo/probes/desktop-final-20261117.json`, `rea-exe-final-summary.json` e `release-performance-20261117.json`.
+
+Para utilização, dê dois cliques no executável. A aplicação mantém o Design System existente; esta auditoria não redesenhou a interface. O guia de uso descreve a dependência da pasta original e o encerramento por `--stop`.
+
+## Conhecimento reutilizável
+
+Para consulta pela Devstore, os mecanismos úteis são: recibos de fontes com revisão para revogação, ligação explícita entre projeto e pasta, exportação pelo mesmo descritor validado e manifesto de release separado dos dados privados. Reutilizar os padrões e as suas regressões é suficiente; não há benefício concreto em importar novamente o próprio checkout ou instalar outra ferramenta. Ponytail, REA, Harness e Segurança já cobrem esta necessidade; não é necessário criar um especialista. Esta auditoria não incorporou conteúdo nem alterou soluções internas da Devstore.
 
 Não foram repetidas chamadas de modelo pagas; as provas e o ensaio real de código/imagem de 16/11 são históricos. Não se verificou concorrência PostgreSQL, todos os idiomas ou aceitação de um projeto real nesta auditoria.
