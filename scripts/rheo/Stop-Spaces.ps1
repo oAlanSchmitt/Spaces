@@ -39,23 +39,27 @@ function Get-RheoContext {
 function Assert-RheoRelease {
     $context = Get-RheoContext
     if (-not $context.releaseDirectory) { return }
+    [void](Resolve-RheoPath $context.releaseDirectory)
     $expected = @{}
     foreach ($entry in $context.release.files) {
         if (-not $entry.path -or $entry.path -match '(^/|\\|:|(^|/)\.\.?(/|$))' -or $entry.sha256 -notmatch '^[a-f0-9]{64}$') { throw 'Invalid release file entry.' }
         if ($expected.ContainsKey($entry.path)) { throw 'Duplicate release file entry.' }
         $expected[$entry.path] = $entry.sha256
-        $file = Resolve-RheoPath (Join-Path $context.releaseDirectory $entry.path)
-        if (-not (Test-Path -LiteralPath $file -PathType Leaf) -or (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $entry.sha256) {
-            throw "Spaces release integrity failed: $($entry.path)"
-        }
     }
+    # The root's ancestors are checked once; enumeration checks every descendant without following links.
     foreach ($file in Get-ChildItem -LiteralPath $context.releaseDirectory -Recurse -Force) {
-        [void](Resolve-RheoPath $file.FullName)
+        if ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Refusing a reparse point in the Spaces release.' }
         if (-not $file.PSIsContainer) {
             $relative = [IO.Path]::GetRelativePath($context.releaseDirectory, $file.FullName).Replace('\', '/')
-            if ($relative -ne 'spaces-release.json' -and -not $expected.ContainsKey($relative)) { throw "Unexpected release file: $relative" }
+            if ($relative -eq 'spaces-release.json') { continue }
+            if (-not $expected.ContainsKey($relative)) { throw "Unexpected release file: $relative" }
+            if ((Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash -ne $expected[$relative]) {
+                throw "Spaces release integrity failed: $relative"
+            }
+            $expected.Remove($relative)
         }
     }
+    if ($expected.Count) { throw "Spaces release integrity failed: $($expected.Count) missing file(s): $($expected.Keys -join ', ')" }
     if ($context.release.codex.path) {
         if (-not (Test-Path -LiteralPath $context.release.codex.path -PathType Leaf) -or
             (Get-FileHash -LiteralPath $context.release.codex.path -Algorithm SHA256).Hash -ne $context.release.codex.sha256) {

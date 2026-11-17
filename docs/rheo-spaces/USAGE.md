@@ -2,6 +2,14 @@
 
 Com o servidor iniciado, o piloto local abre em **http://localhost:4410**. A opção **Spaces** no menu reúne áreas, espaços e projetos. A instalação oficial continua em separado. Abrir o desktop original não substitui automaticamente a sua interface pelo fork.
 
+## Abrir no Windows
+
+Dê dois cliques em **Spaces.exe**, na Área de Trabalho. O lançador verifica o pacote e abre esta versão no navegador padrão. Se o servidor já estiver pronto, reutiliza-o. Entre com a sua conta local do piloto caso esse navegador ainda não tenha sessão.
+
+Este executável usa uma cópia congelada do servidor e da interface. Editar o checkout não atualiza a versão entregue. Os dados e o login Codex continuam nos diretórios privados existentes. Conserve a pasta `rheo-spaces`: o executável da Área de Trabalho depende do pacote guardado em `.rheo/releases` e do PowerShell/Codex validados deste PC.
+
+Fechar o navegador deixa o servidor disponível. Para o encerrar de forma limpa, execute `Spaces.exe --stop` no terminal. Não copie apenas o executável para outro computador; esta entrega está associada à instalação local.
+
 ## Organizar o trabalho
 
 Use **Área → Espaço → Projeto**:

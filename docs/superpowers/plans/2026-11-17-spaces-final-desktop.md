@@ -8,9 +8,9 @@
 
 ## Plano de implementação
 
-- [ ] Auditoria independente Ponytail dos caminhos de conhecimento, execução e artefactos, com reprodução dos achados. Aplicar apenas correções confirmadas com teste de regressão.
-- [ ] Centralizar raiz privada e permitir override apenas no build local. Testar fonte e bundle sem alterar a identidade do Codex.
-- [ ] Reutilizar Start/Stop com contexto de release explícito e validado. Testar integridade, versão errada, processo já ativo e erro de arranque.
+- [x] Auditoria independente Ponytail dos caminhos de conhecimento, execução e artefactos, com reprodução dos achados. Aplicar apenas correções confirmadas com teste de regressão.
+- [x] Centralizar raiz privada e permitir override apenas no build local. Testar fonte e bundle sem alterar a identidade do Codex.
+- [x] Reutilizar Start/Stop com contexto de release explícito e validado. Testar integridade, versão errada, processo já ativo e erro de arranque.
 - [ ] Construir pacote congelado e `Spaces.exe`, registar commit e SHA-256. Colocar executável na Área de Trabalho.
 - [ ] Parar piloto pelo supervisor, backup frio, abrir executável e verificar identidade, health e interface; repetir abertura sem duplicar servidor. Registar verificações e limites.
 

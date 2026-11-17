@@ -1,7 +1,17 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { createHash, randomUUID } from "node:crypto";
-import { appendFileSync, cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import {
+  appendFileSync,
+  cpSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join, resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "../..");
 const pwsh = Bun.which("pwsh");
@@ -23,6 +33,22 @@ function run(code: string) {
 const manifestPath = join(release, "spaces-release.json");
 const library = join(release, "scripts/rheo/Stop-Spaces.ps1");
 const check = () => run(`. ${quote(library)} -Library; Assert-RheoRelease; Write-Output 'verified'`);
+function canCreateJunction() {
+  if (process.platform !== "win32") return false;
+  const probe = join(root, ".rheo/probes", `junction-test-${randomUUID()}`);
+  mkdirSync(join(probe, "target"), { recursive: true });
+  try {
+    symlinkSync(join(probe, "target"), join(probe, "link"), "junction");
+    unlinkSync(join(probe, "link"));
+    return true;
+  } catch (error) {
+    if (["EPERM", "EACCES"].includes((error as NodeJS.ErrnoException).code ?? "")) return false;
+    throw error;
+  } finally {
+    rmSync(probe, { recursive: true, force: true });
+  }
+}
+const junctionAvailable = canCreateJunction();
 
 describe.skipIf(process.platform !== "win32" || !pwsh)("frozen Spaces release guards", () => {
   beforeEach(() => {
@@ -60,6 +86,12 @@ describe.skipIf(process.platform !== "win32" || !pwsh)("frozen Spaces release gu
     expect(result.code).not.toBe(0);
     expect(result.output).toContain("integrity failed");
   });
+  test("refuses a missing declared file", () => {
+    rmSync(join(release, "runtime/bun.exe"));
+    const result = check();
+    expect(result.code).not.toBe(0);
+    expect(result.output).toContain("integrity failed");
+  });
   test("refuses unlisted code next to the server", () => {
     writeFileSync(join(release, "extra.js"), "unexpected");
     expect(check().output).toContain("Unexpected release file");
@@ -80,5 +112,38 @@ describe.skipIf(process.platform !== "win32" || !pwsh)("frozen Spaces release gu
     const result = run(`. ${quote(library)} -Library; Resolve-RheoData ${quote(join(release, "data"))}`);
     expect(result.code).not.toBe(0);
     expect(result.output).toContain("releases as a data directory");
+  });
+  test("refuses a changed Codex identity", () => {
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    manifest.codex.sha256 = "0".repeat(64);
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+    expect(check().output).toContain("pinned Codex executable is missing or changed");
+  });
+  test.skipIf(!junctionAvailable)("refuses a junction inside the release", () => {
+    const runtime = join(release, "runtime");
+    const outside = join(base, "outside-runtime");
+    renameSync(runtime, outside);
+    symlinkSync(outside, runtime, "junction");
+    try {
+      const result = check();
+      expect(result.code).not.toBe(0);
+      expect(result.output).toContain("reparse point");
+    } finally {
+      unlinkSync(runtime);
+    }
+  });
+  test.skipIf(!junctionAvailable)("refuses a junction in the release ancestry", () => {
+    const releases = dirname(release);
+    const outside = join(base, "outside-releases");
+    renameSync(releases, outside);
+    symlinkSync(outside, releases, "junction");
+    try {
+      const result = check();
+      expect(result.code).not.toBe(0);
+      expect(result.output).toContain("reparse point");
+    } finally {
+      unlinkSync(releases);
+      renameSync(outside, releases);
+    }
   });
 });
