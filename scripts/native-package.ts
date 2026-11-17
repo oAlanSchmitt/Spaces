@@ -25,7 +25,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 const ROOT = resolve(import.meta.dir, "..");
@@ -108,8 +108,8 @@ function copyPackage(name: string, from: string, into: string, done = new Set<st
 }
 
 /** The npm package a bundled file belongs to (`…/node_modules/<name>/…`), with its folder. */
-function owningPackage(file: string): { name: string; dir: string } | null {
-  const parts = file.split("/");
+export function owningPackage(file: string): { name: string; dir: string } | null {
+  const parts = file.replaceAll("\\", "/").split("/");
   const at = parts.lastIndexOf("node_modules");
   if (at < 0) return null;
   const scoped = parts[at + 1]?.startsWith("@");
@@ -140,7 +140,8 @@ function copyLicenses(inputs: string[], into: string) {
 }
 
 /** `<out>/agentes/<version>`: everything but Bun. */
-export async function buildFolders(out: string, version: string) {
+export async function buildFolders(out: string, version: string, privateRoot?: string) {
+  if (privateRoot !== undefined && !isAbsolute(privateRoot)) throw new Error("Spaces privateRoot must be absolute");
   const base = join(out, "agentes", version);
   rmSync(base, { recursive: true, force: true });
   mkdirSync(base, { recursive: true });
@@ -165,6 +166,7 @@ export async function buildFolders(out: string, version: string) {
     target: "bun",
     outdir: join(server, "lib"),
     external: EXTERNAL,
+    ...(privateRoot === undefined ? {} : { define: { SPACES_BUILD_PRIVATE_ROOT: JSON.stringify(privateRoot) } }),
     metafile: true,
   });
   if (!built.success) throw new AggregateError(built.logs, "the server didn't bundle");

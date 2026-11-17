@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { bunPins, LAUNCHER, packageName, TARGETS } from "../../../scripts/native-package";
+import { bunPins, LAUNCHER, owningPackage, packageName, TARGETS } from "../../../scripts/native-package";
 
 const installSh = readFileSync(join(import.meta.dir, "../../../install.sh"), "utf8");
 
@@ -19,4 +19,16 @@ test("the package's names and its launcher", () => {
   expect(packageName("1.4.0", "darwin-arm64")).toBe("agentes-native-1.4.0-darwin-arm64.tar.gz");
   expect(LAUNCHER.startsWith("#!/bin/sh\n")).toBe(true);
   expect(LAUNCHER).toContain('exec "$here/../runtime/bun" "$here/../server/native.js" "$@"');
+});
+
+test("bundled licenses resolve nested and scoped npm packages on Windows and POSIX", () => {
+  expect(owningPackage("C:\\app\\node_modules\\@scope\\package\\lib\\index.js")).toEqual({
+    name: "@scope/package",
+    dir: "C:/app/node_modules/@scope/package",
+  });
+  expect(owningPackage("/app/node_modules/outer/node_modules/inner/index.js")).toEqual({
+    name: "inner",
+    dir: "/app/node_modules/outer/node_modules/inner",
+  });
+  expect(owningPackage("/app/src/main.ts")).toBeNull();
 });

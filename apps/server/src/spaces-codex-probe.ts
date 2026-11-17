@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 import type { Socket } from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { SPACES_PRIVATE_ROOT } from "./spaces-private-root";
 
 export interface SpacesProbeClient {
   request(method: string, params: unknown): Promise<unknown>;
@@ -48,8 +49,7 @@ export interface SpacesProbeReport {
   attestation?: SpacesCodexAttestation;
 }
 
-const repository = path.resolve(import.meta.dir, "../../..");
-const privateRoot = path.join(repository, ".rheo");
+const privateRoot = SPACES_PRIVATE_ROOT;
 const inside = (parent: string, child: string) => child.toLowerCase().startsWith(`${parent.toLowerCase()}${path.sep}`);
 const quote = (value: string) => `'${value.replaceAll("'", "''")}'`;
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error)).slice(0, 1500);

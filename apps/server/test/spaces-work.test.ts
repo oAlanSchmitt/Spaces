@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { link, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { and, eq, schema } from "@agenteschat/db";
@@ -351,6 +351,23 @@ test("a junction in the work scratch path cannot cause writes outside the bound 
   expect(result.isError).toBe(true);
   expect(turns).toHaveLength(0);
   await expect(readFile(path.join(outside, "tmp"))).rejects.toThrow();
+});
+
+test("a hardlink inside the project cannot export a private file outside its root", async () => {
+  await service.bind(f.owner.id, project.id, { folderPath: root, revision: null });
+  const secret = path.join(base, "private", "secret.txt");
+  await writeFile(secret, "synthetic-private-hardlink-canary");
+  await link(secret, path.join(root, "output.txt"));
+  const result = await service.execute(
+    { instruction: "Deliver the output", outputPaths: ["output.txt"] },
+    ctx,
+    artifacts,
+  );
+  expect(result.isError).toBe(true);
+  expect(JSON.parse(result.content).files).toHaveLength(0);
+  expect(result.content).not.toContain("synthetic-private-hardlink-canary");
+  expect(await f.db.select().from(schema.artifacts).where(eq(schema.artifacts.orgId, project.orgId))).toHaveLength(0);
+  expect(await readFile(secret, "utf8")).toBe("synthetic-private-hardlink-canary");
 });
 
 test("an ended native transport without completion is an explicit failure and is not retried", async () => {

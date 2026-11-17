@@ -20,6 +20,7 @@ import { laidOut, type ModelResult, type ModelUsage, ProviderError } from "@agen
 import { CodexAppClient, type ServerRequestHandler } from "../runner/brain-codex-app";
 import { readSpacesNativeProof } from "./spaces-codex-native-proof";
 import { probeSpacesCodex } from "./spaces-codex-probe";
+import { SPACES_PRIVATE_ROOT } from "./spaces-private-root";
 import { createSpacesWork } from "./spaces-work";
 
 /** Audited against the JSON schemas shipped by this installed CLI, not a floating minimum version. */
@@ -125,7 +126,7 @@ export async function createSpacesCodexRpc(input: {
   home: string;
   workspace: string;
 }): Promise<SpacesCodexRpc> {
-  const privateRoot = path.resolve(import.meta.dir, "../../../.rheo");
+  const privateRoot = SPACES_PRIVATE_ROOT;
   const home = path.resolve(input.home);
   if (!home.toLowerCase().startsWith(`${privateRoot.toLowerCase()}${path.sep}`))
     throw new ValidationError("Spaces Codex must use its dedicated data home inside this fork");

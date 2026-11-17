@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { lstat, mkdir, readFile, realpath, stat } from "node:fs/promises";
+import { lstat, mkdir, open, realpath, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { and, type Database, type Executor, eq, schema } from "@agenteschat/db";
@@ -31,6 +31,7 @@ import {
 import { type CodexAppRunner, type CodexBrainEvent, CodexThreads } from "../runner/brain-codex";
 import { CodexAppClient, CodexAppServers, codexIsolatedPolicy } from "../runner/brain-codex-app";
 import { spacesCodexLaunch } from "./spaces-codex";
+import { SPACES_PRIVATE_ROOT } from "./spaces-private-root";
 import { probeSpacesWork } from "./spaces-work-probe";
 import { readSpacesWorkProof } from "./spaces-work-proof";
 
@@ -159,7 +160,7 @@ export function createSpacesWork(options: Options) {
     const forbidden = [
       options.home,
       path.resolve(options.home, ".."),
-      path.resolve(import.meta.dir, "../../../.rheo"),
+      SPACES_PRIVATE_ROOT,
       path.join(os.homedir(), ".codex"),
       path.join(os.homedir(), ".agentes"),
       ...(process.env.SystemRoot ? [process.env.SystemRoot] : []),
@@ -523,16 +524,23 @@ export function createSpacesWork(options: Options) {
               throw new ValidationError("Caminho de entrega inválido.");
             const literal = path.resolve(binding.folderPath, relative);
             const actual = await realpath(literal);
-            if (
-              !inside(binding.folderPath, actual) ||
-              key(actual) !== key(literal) ||
-              (await lstat(literal)).isSymbolicLink()
-            )
+            const expectedFile = await lstat(literal);
+            if (!inside(binding.folderPath, actual) || key(actual) !== key(literal) || expectedFile.isSymbolicLink())
               throw new ForbiddenError("O ficheiro sai da pasta do projeto.");
-            const info = await stat(actual);
-            if (!info.isFile() || info.size > 10 * 1024 * 1024)
-              throw new ValidationError("O ficheiro não é regular ou excede 10 MB.");
-            const bytes = await readFile(actual);
+            const file = await open(actual, "r");
+            let bytes: Buffer;
+            try {
+              const info = await file.stat();
+              if (info.dev !== expectedFile.dev || info.ino !== expectedFile.ino || info.nlink !== 1)
+                throw new ForbiddenError("O ficheiro mudou ou contém uma ligação física não autorizada.");
+              if (!info.isFile() || info.size > 10 * 1024 * 1024)
+                throw new ValidationError("O ficheiro não é regular ou excede 10 MB.");
+              // Validate and read the same open file so a path swap cannot redirect this privileged read.
+              bytes = await file.readFile();
+              if (bytes.length > 10 * 1024 * 1024) throw new ValidationError("O ficheiro excede 10 MB.");
+            } finally {
+              await file.close();
+            }
             const location = await artifacts.blobs.forOrg(ctx.orgId);
             const artifact = await withRheoPublication(options.db, ctx.orgId, ctx.runId, async (tx) => {
               await tx

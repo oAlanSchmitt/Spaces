@@ -34,6 +34,12 @@ function Start-RheoWorker {
             BUN_BE_BUN = '1'; WEB_DIR = $context.web; PORT = '4410'; PUBLIC_URL = 'http://localhost:4410'
             TELEMETRY = 'off'; INSTALL_MODE = 'native'; MACHINE_PROVISIONING = 'off'
         }.GetEnumerator()) { $info.Environment[$entry.Key] = $entry.Value }
+        $info.Environment['SOURCE_URL'] = 'https://github.com/oAlanSchmitt/Spaces'
+        if ($context.releaseDirectory) {
+            $info.Environment['APP_VERSION'] = $context.release.version
+            $info.Environment['SOURCE_URL'] = "https://github.com/oAlanSchmitt/Spaces/tree/$($context.release.sourceCommit)"
+            $info.Environment['PATH'] = [IO.Path]::GetDirectoryName($context.release.codex.path) + ';' + $info.Environment['PATH']
+        }
         $child = [Diagnostics.Process]::Start($info)
         foreach ($stream in @(@{ name = 'stdout'; source = $child.StandardOutput.BaseStream }, @{ name = 'stderr'; source = $child.StandardError.BaseStream })) {
             $file = [IO.File]::Open((Join-Path $DataDirectory "logs/launcher-$($stream.name).log"), [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::Read)
@@ -78,6 +84,7 @@ function Start-RheoWorker {
 }
 
 try {
+    Assert-RheoRelease
     if (Test-Path -LiteralPath (Join-Path $DataDirectory '.rheo-recovery-hold.json')) { throw 'Recovery hold: review restored jobs, credentials and code compatibility before explicitly releasing this directory.' }
     foreach ($path in @($context.executable, $context.nativeEntry, (Join-Path $context.web 'index.html'), $context.originManifest)) {
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Required pilot file is missing: $path" }

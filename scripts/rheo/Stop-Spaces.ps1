@@ -2,17 +2,65 @@
 param([string]$DataDirectory, [switch]$Library)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$script:RheoContextCache = $null
 
 # Shared guards stay here so every maintenance command uses the same boundary.
 function Get-RheoContext {
+    if ($script:RheoContextCache) { return $script:RheoContextCache }
     $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-    [pscustomobject]@{
+    $release = Join-Path $root 'spaces-release.json'
+    if (Test-Path -LiteralPath $release -PathType Leaf) {
+        $manifest = Get-Content -LiteralPath $release -Raw | ConvertFrom-Json
+        if ($manifest.schemaVersion -ne 1 -or $manifest.sourceCommit -notmatch '^[a-f0-9]{40}$' -or
+            $manifest.version -notmatch '^spaces-[a-f0-9]{12}$' -or -not [IO.Path]::IsPathFullyQualified($manifest.installationRoot)) {
+            throw 'Invalid Spaces release manifest.'
+        }
+        $installation = [IO.Path]::GetFullPath($manifest.installationRoot)
+        if ($root -ne (Join-Path $installation ".rheo/releases/$($manifest.version)")) { throw 'The Spaces release was moved; use its original installation folder.' }
+        $script:RheoContextCache = [pscustomobject]@{
+            root = $installation; privateRoot = Join-Path $installation '.rheo'
+            executable = Join-Path $root 'runtime/bun.exe'; nativeEntry = Join-Path $root 'server/native.js'
+            web = Join-Path $root 'web'; originManifest = $release; releaseDirectory = $root; release = $manifest
+        }
+        return $script:RheoContextCache
+    }
+    $script:RheoContextCache = [pscustomobject]@{
         root = $root
         privateRoot = Join-Path $root '.rheo'
         executable = Join-Path $root '.rheo/runtime/bun.exe'
         nativeEntry = Join-Path $root 'apps/server/src/native.ts'
         web = Join-Path $root 'apps/web/dist'
         originManifest = Join-Path $root 'docs/rheo-spaces/origin-manifest.json'
+        releaseDirectory = $null; release = $null
+    }
+    $script:RheoContextCache
+}
+
+function Assert-RheoRelease {
+    $context = Get-RheoContext
+    if (-not $context.releaseDirectory) { return }
+    $expected = @{}
+    foreach ($entry in $context.release.files) {
+        if (-not $entry.path -or $entry.path -match '(^/|\\|:|(^|/)\.\.?(/|$))' -or $entry.sha256 -notmatch '^[a-f0-9]{64}$') { throw 'Invalid release file entry.' }
+        if ($expected.ContainsKey($entry.path)) { throw 'Duplicate release file entry.' }
+        $expected[$entry.path] = $entry.sha256
+        $file = Resolve-RheoPath (Join-Path $context.releaseDirectory $entry.path)
+        if (-not (Test-Path -LiteralPath $file -PathType Leaf) -or (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $entry.sha256) {
+            throw "Spaces release integrity failed: $($entry.path)"
+        }
+    }
+    foreach ($file in Get-ChildItem -LiteralPath $context.releaseDirectory -Recurse -Force) {
+        [void](Resolve-RheoPath $file.FullName)
+        if (-not $file.PSIsContainer) {
+            $relative = [IO.Path]::GetRelativePath($context.releaseDirectory, $file.FullName).Replace('\', '/')
+            if ($relative -ne 'spaces-release.json' -and -not $expected.ContainsKey($relative)) { throw "Unexpected release file: $relative" }
+        }
+    }
+    if ($context.release.codex.path) {
+        if (-not (Test-Path -LiteralPath $context.release.codex.path -PathType Leaf) -or
+            (Get-FileHash -LiteralPath $context.release.codex.path -Algorithm SHA256).Hash -ne $context.release.codex.sha256) {
+            throw 'The pinned Codex executable is missing or changed. Revalidate Codex before rebuilding this release.'
+        }
     }
 }
 
@@ -39,7 +87,7 @@ function Resolve-RheoData([string]$Path) {
     if (-not $Path) { $Path = Join-Path (Get-RheoContext).privateRoot 'data' }
     $full = Resolve-RheoPath $Path
     $relative = [IO.Path]::GetRelativePath((Get-RheoContext).privateRoot, $full)
-    if (($relative -split '[\\/]')[0] -in @('runtime', 'backups')) { throw 'Refusing to use runtime or backups as a data directory.' }
+    if (($relative -split '[\\/]')[0] -in @('runtime', 'backups', 'releases')) { throw 'Refusing to use runtime, backups or releases as a data directory.' }
     $full
 }
 
